@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "537792897840",
+    "project_id": "smart-room-iot-353c5",
+    "storage_bucket": "smart-room-iot-353c5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:537792897840:android:f68f18dc17329f2ade1ef5",
+        "android_client_info": {
+          "package_name": "com.example.smart_room_iot_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "537792897840-6214eu81vfgao04rsqvkhoh67pq302qj.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.smart_room_iot_app",
+            "certificate_hash": "2e85ae9e9490ce113d6dab06c421300bc6a94301"
+          }
+        },
+        {
+          "client_id": "537792897840-187bauhhqk8attcn4ch2tib445e8n59e.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAu1BLEFA3Snj7wK6m27Tb_-rzsGNJUVXg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "537792897840-187bauhhqk8attcn4ch2tib445e8n59e.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "537792897840-o6qc17422ad9srau1gs6jd5p0g2bcgg0.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.smartRoomIotApp"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
