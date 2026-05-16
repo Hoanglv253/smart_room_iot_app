@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+// Gọi màn hình Home vào
+import '../../home/screens/home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -11,8 +13,16 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final AuthService _authService = AuthService();
   bool _obscurePassword = true;
+
+  final AuthService _authService = AuthService();
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -26,7 +36,6 @@ class _LoginScreenState extends State<LoginScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Logo & Tiêu đề
                 const Icon(
                   Icons.smart_toy_rounded,
                   size: 80,
@@ -50,7 +59,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 48),
 
-                // Trường nhập Email
                 TextField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
@@ -66,7 +74,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Trường nhập Mật khẩu
                 TextField(
                   controller: _passwordController,
                   obscureText: _obscurePassword,
@@ -93,44 +100,42 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
 
-                // Quên mật khẩu
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
-                    onPressed: () {
-                      // TODO: Thêm logic quên mật khẩu
-                    },
+                    onPressed: () {},
                     child: const Text('Quên mật khẩu?'),
                   ),
                 ),
                 const SizedBox(height: 24),
 
-                // Nút Đăng Nhập
+                // ===== NÚT ĐĂNG NHẬP EMAIL =====
                 ElevatedButton(
                   onPressed: () async {
                     try {
-                      // Hiện thông báo đang xử lý (tùy chọn)
-                      print('Đang đăng nhập với: ${_emailController.text}');
-
-                      // Gọi hàm đăng nhập
                       final user = await _authService.loginWithEmail(
                         _emailController.text,
                         _passwordController.text,
                       );
-
-                      if (user != null) {
+                      // NẾU THÀNH CÔNG -> BAY SANG HOME SCREEN
+                      if (user != null && context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('Đăng nhập Email thành công!'),
+                            content: Text('Đăng nhập thành công!'),
                           ),
                         );
-                        // TODO: Chuyển sang màn hình chính (Home Screen)
+                        Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(
+                            builder: (context) => const HomeScreen(),
+                          ),
+                        );
                       }
                     } catch (e) {
-                      // Báo lỗi ra màn hình cho người dùng biết
-                      ScaffoldMessenger.of(
-                        context,
-                      ).showSnackBar(SnackBar(content: Text(e.toString())));
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(
+                          context,
+                        ).showSnackBar(SnackBar(content: Text(e.toString())));
+                      }
                     }
                   },
                   style: ElevatedButton.styleFrom(
@@ -149,66 +154,59 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
 
-                // Đường kẻ "Hoặc"
+                const SizedBox(height: 24),
                 Row(
                   children: [
-                    Expanded(
-                      child: Divider(color: Colors.grey[400], thickness: 1),
+                    Expanded(child: Divider(color: Colors.grey[400])),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16),
+                      child: Text('HOẶC', style: TextStyle(color: Colors.grey)),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                      child: Text(
-                        'Hoặc',
-                        style: TextStyle(color: Colors.grey[600]),
-                      ),
-                    ),
-                    Expanded(
-                      child: Divider(color: Colors.grey[400], thickness: 1),
-                    ),
+                    Expanded(child: Divider(color: Colors.grey[400])),
                   ],
                 ),
-
                 const SizedBox(height: 24),
 
-                // Nút Đăng nhập Google
+                // ===== NÚT ĐĂNG NHẬP GOOGLE =====
                 OutlinedButton.icon(
                   onPressed: () async {
                     try {
                       final user = await _authService.loginWithGoogle();
-
-                      if (user != null) {
+                      // NẾU THÀNH CÔNG -> BAY SANG HOME SCREEN
+                      if (user != null && context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text('Đăng nhập Google thành công!'),
                           ),
                         );
-                        // TODO: Chuyển sang màn hình chính (Home Screen)
+                        Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(
+                            builder: (context) => const HomeScreen(),
+                          ),
+                        );
                       }
                     } catch (e) {
-                      ScaffoldMessenger.of(
-                        context,
-                      ).showSnackBar(SnackBar(content: Text(e.toString())));
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(
+                          context,
+                        ).showSnackBar(SnackBar(content: Text(e.toString())));
+                      }
                     }
                   },
-                  // Tạm thời dùng icon có sẵn, sau này mình chèn Logo thật sau cho đẹp
                   icon: const Icon(
-                    Icons.g_mobiledata,
-                    size: 32,
-                    color: Colors.red,
+                    Icons.account_circle,
+                    color: Colors.redAccent,
+                    size: 28,
                   ),
                   label: const Text(
                     'Tiếp tục với Google',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
+                    style: TextStyle(fontSize: 16, color: Colors.black87),
                   ),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    side: BorderSide(color: Colors.grey.shade300, width: 2),
+                    backgroundColor: Colors.white,
+                    side: const BorderSide(color: Colors.grey),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
