@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../auth/services/auth_service.dart';
 import '../../auth/screens/login_screen.dart';
@@ -149,7 +149,7 @@ class HomeScreen extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             SizedBox(
-              height: 170,
+              height: 195,
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 children: [
@@ -356,20 +356,20 @@ class HomeScreen extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         SizedBox(
-                          height: 66,
+                          height: 62,
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
                               Container(
                                 width: 26,
-                                height: 52,
+                                height: 48,
                                 color: mainColor,
                               ),
                               const SizedBox(width: 7),
                               Container(
                                 width: 26,
-                                height: 68,
+                                height: 62,
                                 color: Color(0xFFE3EEF8),
                               ),
                               const SizedBox(width: 7),
@@ -623,79 +623,6 @@ class HomeScreen extends StatelessWidget {
   // =========================================================================
   // HÀM BỔ TRỢ UI (Helper Widgets & Functions)
   // =========================================================================
-
-  // Hàm vẽ khối số liệu Dashboard Admin
-  Widget _buildMetricCard(
-    IconData icon,
-    String label,
-    String value,
-    Color bgColor,
-    Color iconColor,
-  ) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: iconColor.withValues(alpha: 0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, color: iconColor, size: 32),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 14,
-              color: Colors.black54,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: iconColor,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Hàm vẽ dòng danh sách bảo trì
-  Widget _buildMaintenanceItem(
-    IconData icon,
-    String room,
-    String issue,
-    String time,
-    Color color,
-  ) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey[200]!),
-      ),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: color.withOpacity(0.1),
-          child: Icon(icon, color: color, size: 22),
-        ),
-        title: Text(room, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(issue, style: const TextStyle(color: Colors.black54)),
-        trailing: Text(
-          time,
-          style: const TextStyle(color: Colors.grey, fontSize: 13),
-        ),
-      ),
-    );
-  }
 
   // Hàm xử lý Đăng xuất dùng chung cho cả 2 giao diện
   void _handleLogout(BuildContext context, AuthService authService) async {
