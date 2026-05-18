@@ -17,6 +17,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       TextEditingController();
 
   bool _obscurePassword = true;
+  String _selectedRole = 'user';
   final AuthService _authService = AuthService();
 
   @override
@@ -28,8 +29,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  void _handleRegister() async {
-    // 1. Kiểm tra mật khẩu nhập lại có khớp không
+  Future<void> _handleRegister() async {
     if (_passwordController.text != _confirmPasswordController.text) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Mật khẩu xác nhận không khớp!')),
@@ -37,27 +37,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
-    // 2. Gọi hàm đăng ký từ AuthService
     try {
       final user = await _authService.registerWithEmail(
         _emailController.text.trim(),
         _passwordController.text.trim(),
         _nameController.text.trim(),
+        _selectedRole,
       );
 
-      // 3. Nếu thành công -> Chuyển thẳng vào Home Screen
-      if (user != null && context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Đăng ký thành công!')));
-        // Dùng pushAndRemoveUntil để xóa sạch lịch sử trang, không cho lùi lại màn hình đăng ký nữa
+      if (user != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đăng ký thành công!')),
+        );
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (context) => const HomeScreen()),
           (Route<dynamic> route) => false,
         );
       }
     } catch (e) {
-      if (context.mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(e.toString())));
@@ -69,7 +67,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.blue[50],
-      // Nút back trên AppBar để quay lại trang Login
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -102,8 +99,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   style: TextStyle(fontSize: 16, color: Colors.grey[700]),
                 ),
                 const SizedBox(height: 48),
-
-                // ===== Ô NHẬP TÊN =====
                 TextField(
                   controller: _nameController,
                   decoration: InputDecoration(
@@ -117,8 +112,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-
-                // ===== Ô NHẬP EMAIL =====
                 TextField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
@@ -133,8 +126,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-
-                // ===== Ô NHẬP MẬT KHẨU =====
                 TextField(
                   controller: _passwordController,
                   obscureText: _obscurePassword,
@@ -161,8 +152,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-
-                // ===== Ô XÁC NHẬN MẬT KHẨU =====
                 TextField(
                   controller: _confirmPasswordController,
                   obscureText: _obscurePassword,
@@ -177,8 +166,33 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                 ),
                 const SizedBox(height: 32),
-
-                // ===== NÚT ĐĂNG KÝ =====
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedRole,
+                  decoration: InputDecoration(
+                    labelText: 'Phân quyền tài khoản',
+                    prefixIcon: const Icon(Icons.admin_panel_settings_outlined),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                    fillColor: Colors.white,
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'user',
+                      child: Text('Người thuê'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'manager',
+                      child: Text('Quản lý'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => _selectedRole = value);
+                  },
+                ),
+                const SizedBox(height: 32),
                 ElevatedButton(
                   onPressed: _handleRegister,
                   style: ElevatedButton.styleFrom(

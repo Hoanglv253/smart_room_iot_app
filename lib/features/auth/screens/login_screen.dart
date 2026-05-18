@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-// Gọi màn hình Home vào
 import '../../home/screens/home_screen.dart';
 import 'register_screen.dart';
 
@@ -59,7 +58,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   style: TextStyle(fontSize: 16, color: Colors.grey[700]),
                 ),
                 const SizedBox(height: 48),
-
                 TextField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
@@ -74,7 +72,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-
                 TextField(
                   controller: _passwordController,
                   obscureText: _obscurePassword,
@@ -100,7 +97,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     fillColor: Colors.white,
                   ),
                 ),
-
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
@@ -109,8 +105,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
-
-                // ===== NÚT ĐĂNG NHẬP EMAIL =====
                 ElevatedButton(
                   onPressed: () async {
                     try {
@@ -118,7 +112,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         _emailController.text,
                         _passwordController.text,
                       );
-                      // NẾU THÀNH CÔNG -> BAY SANG HOME SCREEN
                       if (user != null && context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
@@ -155,7 +148,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 24),
                 Row(
                   children: [
@@ -168,13 +160,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   ],
                 ),
                 const SizedBox(height: 24),
-
-                // ===== NÚT ĐĂNG NHẬP GOOGLE =====
                 OutlinedButton.icon(
                   onPressed: () async {
                     try {
                       final user = await _authService.loginWithGoogle();
-                      // NẾU THÀNH CÔNG -> BAY SANG HOME SCREEN
                       if (user != null && context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
@@ -213,17 +202,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                 ),
-                // ... code nút Google ở trên
                 const SizedBox(height: 24),
-
-                // Dòng chữ "Chưa có tài khoản? Đăng ký ngay"
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const Text('Chưa có tài khoản?'),
                     TextButton(
                       onPressed: () {
-                        // Chuyển sang màn hình Đăng ký
                         Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (context) => const RegisterScreen(),
@@ -240,7 +225,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ],
                 ),
-              ], // Đây là mảng children của Column hiện tại
+              ],
             ),
           ),
         ),
