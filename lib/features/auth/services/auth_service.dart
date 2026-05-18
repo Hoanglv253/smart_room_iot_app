@@ -27,6 +27,7 @@ class AuthService {
     String email,
     String password,
     String name,
+    String role,
   ) async {
     try {
       // 1. Tạo tài khoản trên Firebase Auth
@@ -45,7 +46,7 @@ class AuthService {
           'uid': user.uid,
           'email': user.email,
           'name': name,
-          'role': 'user', // Đây chính là mấu chốt phân quyền!
+          'role': role,
           'createdAt': FieldValue.serverTimestamp(),
         });
       }

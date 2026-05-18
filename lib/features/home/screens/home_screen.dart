@@ -1,5 +1,10 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../admin/screens/admin_building_rooms_screen.dart';
+import '../../admin/screens/admin_device_list_screen.dart';
+import '../../admin/screens/admin_settings_screen.dart';
+import '../../admin/screens/admin_user_list_screen.dart';
 import '../../auth/services/auth_service.dart';
 import '../../auth/screens/login_screen.dart';
 import '../../room/screens/room_control_screen.dart'; // Import màn hình phòng của user
@@ -33,8 +38,10 @@ class HomeScreen extends StatelessWidget {
         // 2. PHÂN LUỒNG GIAO DIỆN TUYỆT ĐỐI THEO ROLE
         if (role == 'admin') {
           return _buildAdminDashboard(context, user, authService);
+        } else if (role == 'manager') {
+          return _buildManagerDashboard(context, user, authService);
         } else {
-          return _buildUserHome(context, user, authService);
+          return _buildUserHome();
         }
       },
     );
@@ -100,7 +107,7 @@ class HomeScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.settings, color: Colors.white, size: 21),
-            onPressed: () {},
+            onPressed: () => _openAdminSettings(context),
           ),
           Stack(
             alignment: Alignment.center,
@@ -148,44 +155,7 @@ class HomeScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 10),
-            SizedBox(
-              height: 195,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: [
-                  _buildAdminStatCard(
-                    title: 'Người Dùng',
-                    centerValue: '154',
-                    centerLabel: 'Tổng số',
-                    type: 'donut',
-                    legendOne: 'Admins',
-                    legendTwo: 'Quản lý',
-                    legendThree: 'Người thuê',
-                    mainColor: const Color(0xFF1565C0),
-                  ),
-                  _buildAdminStatCard(
-                    title: 'Phòng',
-                    centerValue: '85',
-                    centerLabel: '',
-                    type: 'bar',
-                    legendOne: 'Hợp đồng: 70',
-                    legendTwo: 'Trống: 15',
-                    legendThree: '',
-                    mainColor: const Color(0xFF1565C0),
-                  ),
-                  _buildAdminStatCard(
-                    title: 'Thiết Bị',
-                    centerValue: '92%',
-                    centerLabel: '',
-                    type: 'donut',
-                    legendOne: 'Online',
-                    legendTwo: 'Offline',
-                    legendThree: '',
-                    mainColor: const Color(0xFF26A69A),
-                  ),
-                ],
-              ),
-            ),
+            _buildAdminStatsSection(),
             const SizedBox(height: 12),
             Card(
               elevation: 1,
@@ -204,11 +174,13 @@ class HomeScreen extends StatelessWidget {
                     Icons.groups,
                     'Quản Lý\nNgười Dùng',
                     const Color(0xFF1565C0),
+                    onTap: () => _openAdminUserList(context),
                   ),
                   _buildAdminActionItem(
                     Icons.apartment,
                     'Quản Lý\nTòa Nhà',
                     const Color(0xFF1565C0),
+                    onTap: () => _openAdminBuildingRooms(context),
                   ),
                   _buildAdminActionItem(
                     Icons.settings,
@@ -279,6 +251,15 @@ class HomeScreen extends StatelessWidget {
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: 0,
+        onTap: (index) {
+          if (index == 1) {
+            _openAdminUserList(context);
+          } else if (index == 2) {
+            _openAdminDeviceList(context);
+          } else if (index == 4) {
+            _openAdminSettings(context);
+          }
+        },
         type: BottomNavigationBarType.fixed,
         selectedItemColor: const Color(0xFF1565C0),
         unselectedItemColor: Colors.grey,
@@ -447,6 +428,73 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildAdminStatsSection() {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance.collection('users').snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Container(
+            height: 92,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Text(
+              'Không tải được dữ liệu thống kê.',
+              style: TextStyle(fontSize: 13, color: Colors.black54),
+            ),
+          );
+        }
+
+        final stats = _AdminDashboardStats.fromUserDocs(
+          snapshot.data?.docs ??
+              const <QueryDocumentSnapshot<Map<String, dynamic>>>[],
+        );
+        final isLoading = snapshot.connectionState == ConnectionState.waiting;
+
+        return SizedBox(
+          height: 195,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              _buildAdminStatCard(
+                title: 'Người Dùng',
+                centerValue: isLoading ? '...' : '${stats.totalUsers}',
+                centerLabel: 'Tổng số',
+                type: 'donut',
+                legendOne: 'Quản trị: ${stats.admins}',
+                legendTwo: 'Quản lý: ${stats.managers}',
+                legendThree: 'Người thuê: ${stats.tenants}',
+                mainColor: const Color(0xFF1565C0),
+              ),
+              _buildAdminStatCard(
+                title: 'Phòng',
+                centerValue: isLoading ? '...' : '${stats.occupiedRooms}',
+                centerLabel: '',
+                type: 'bar',
+                legendOne: 'Đang thuê: ${stats.occupiedRooms}',
+                legendTwo: 'Có dữ liệu phòng: ${stats.roomsWithCode}',
+                legendThree: '',
+                mainColor: const Color(0xFF1565C0),
+              ),
+              _buildAdminStatCard(
+                title: 'Thiết Bị',
+                centerValue: '${_AdminDashboardStats.onlineDevicePercent}%',
+                centerLabel: '',
+                type: 'donut',
+                legendOne: 'Online: ${_AdminDashboardStats.onlineDevices}',
+                legendTwo: 'Offline: ${_AdminDashboardStats.offlineDevices}',
+                legendThree: '',
+                mainColor: const Color(0xFF26A69A),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildAdminLegendDot(Color color, String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
@@ -471,13 +519,18 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildAdminActionItem(IconData icon, String label, Color color) {
+  Widget _buildAdminActionItem(
+    IconData icon,
+    String label,
+    Color color, {
+    VoidCallback? onTap,
+  }) {
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: const Color(0xFFE7EAF0), width: 0.5),
       ),
       child: InkWell(
-        onTap: () {},
+        onTap: onTap,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -532,92 +585,389 @@ class HomeScreen extends StatelessWidget {
   }
 
   // =========================================================================
-  // GIAO DIỆN 2: USER DASHBOARD (Dành riêng cho cư dân thuê phòng)
+  // GIAO DIỆN 2: MANAGER DASHBOARD (Dành riêng cho tài khoản quản lý)
   // =========================================================================
-  Widget _buildUserHome(
+  Widget _buildManagerDashboard(
     BuildContext context,
     User? user,
     AuthService authService,
   ) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF3F5F8),
       appBar: AppBar(
-        title: const Text('Smart Room Dashboard'),
-        backgroundColor: Colors.blueAccent,
+        backgroundColor: const Color(0xFF1565C0),
         elevation: 0,
         automaticallyImplyLeading: false,
+        toolbarHeight: 72,
+        titleSpacing: 14,
+        title: Row(
+          children: [
+            const CircleAvatar(
+              radius: 17,
+              backgroundColor: Color(0xFFFFD7A6),
+              child: Text(
+                'QL',
+                style: TextStyle(
+                  color: Color(0xFF5D4037),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'IoT CHUNG CƯ - BẢNG ĐIỀU KHIỂN QUẢN LÝ',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    user?.displayName ?? 'Quản lý tòa nhà',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout),
+            icon: const Icon(
+              Icons.notifications,
+              color: Colors.white,
+              size: 21,
+            ),
+            onPressed: () {},
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.white, size: 21),
             onPressed: () => _handleLogout(context, authService),
           ),
+          const SizedBox(width: 4),
         ],
       ),
-      body: Container(
-        width: double.infinity,
-        color: Colors.blue[50],
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(12, 14, 12, 18),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(
-              radius: 50,
-              backgroundColor: Colors.white,
-              backgroundImage: user?.photoURL != null
-                  ? NetworkImage(user!.photoURL!)
-                  : null,
-              child: user?.photoURL == null
-                  ? const Icon(Icons.person, size: 50, color: Colors.blue)
-                  : null,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              user?.displayName ?? 'Người dùng Smart Room',
-              style: const TextStyle(
-                fontSize: 24,
+            const Text(
+              'Tổng Quan Block A',
+              style: TextStyle(
+                fontSize: 17,
                 fontWeight: FontWeight.bold,
-                color: Colors.blueAccent,
+                color: Colors.black87,
               ),
             ),
-            const SizedBox(height: 6),
-            Text(
-              user?.email ?? '',
-              style: TextStyle(fontSize: 15, color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 40),
-
-            // Nút bấm thần thánh dẫn vào phòng của cư dân
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => const RoomControlScreen(),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildManagerSummaryCard(
+                    icon: Icons.apartment,
+                    value: '32',
+                    label: 'Phòng đang thuê',
+                    color: const Color(0xFF1565C0),
                   ),
-                );
-              },
-              icon: const Icon(Icons.meeting_room, color: Colors.white),
-              label: const Text(
-                'Phòng của tôi',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildManagerSummaryCard(
+                    icon: Icons.warning_amber_rounded,
+                    value: '5',
+                    label: 'Yêu cầu sửa chữa',
+                    color: Colors.deepOrange,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildManagerSummaryCard(
+                    icon: Icons.receipt_long,
+                    value: '28',
+                    label: 'Hóa đơn đã thu',
+                    color: const Color(0xFF1A7F3F),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildManagerSummaryCard(
+                    icon: Icons.devices,
+                    value: '94%',
+                    label: 'Thiết bị online',
+                    color: const Color(0xFF26A69A),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Card(
+              elevation: 1,
+              margin: EdgeInsets.zero,
+              color: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: GridView.count(
+                crossAxisCount: 3,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                childAspectRatio: 1.18,
+                children: [
+                  _buildAdminActionItem(
+                    Icons.meeting_room,
+                    'Quản Lý\nPhòng',
+                    const Color(0xFF1565C0),
+                  ),
+                  _buildAdminActionItem(
+                    Icons.people,
+                    'Người\nThuê',
+                    const Color(0xFF1565C0),
+                  ),
+                  _buildAdminActionItem(
+                    Icons.build,
+                    'Yêu Cầu\nSửa Chữa',
+                    Colors.deepOrange,
+                  ),
+                  _buildAdminActionItem(
+                    Icons.electric_bolt,
+                    'Điện Nước',
+                    const Color(0xFF1565C0),
+                  ),
+                  _buildAdminActionItem(
+                    Icons.campaign,
+                    'Gửi\nThông Báo',
+                    const Color(0xFF1565C0),
+                  ),
+                  _buildAdminActionItem(
+                    Icons.analytics,
+                    'Báo Cáo',
+                    const Color(0xFF1565C0),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            Card(
+              elevation: 1,
+              margin: EdgeInsets.zero,
+              color: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 14, 14, 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Phòng Cần Theo Dõi',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildManagerRoomItem(
+                      room: 'P501 - Block A',
+                      tenant: 'Hoàng T.M.',
+                      status: 'Máy lạnh đang bật',
+                      color: const Color(0xFF1565C0),
+                    ),
+                    _buildManagerRoomItem(
+                      room: 'P302 - Block A',
+                      tenant: 'Nguyễn M.K.',
+                      status: 'Chưa thanh toán điện',
+                      color: Colors.deepOrange,
+                    ),
+                    _buildManagerRoomItem(
+                      room: 'P405 - Block B',
+                      tenant: 'Trần H.A.',
+                      status: 'Báo lỗi cảm biến',
+                      color: Colors.redAccent,
+                    ),
+                  ],
                 ),
               ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 40,
-                  vertical: 16,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 3,
+            ),
+          ],
+        ),
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: 0,
+        onTap: (index) {
+          if (index == 1) {
+            _openAdminUserList(context);
+          }
+        },
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: const Color(0xFF1565C0),
+        unselectedItemColor: Colors.grey,
+        selectedLabelStyle: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
+        unselectedLabelStyle: const TextStyle(fontSize: 12),
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Trang Chủ'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.meeting_room),
+            label: 'Phòng',
+          ),
+          BottomNavigationBarItem(icon: Icon(Icons.build), label: 'Sửa Chữa'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.receipt_long),
+            label: 'Hóa Đơn',
+          ),
+          BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Cài Đặt'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildManagerSummaryCard({
+    required IconData icon,
+    required String value,
+    required String label,
+    required Color color,
+  }) {
+    return Card(
+      elevation: 1,
+      margin: EdgeInsets.zero,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      height: 1,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    label,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, color: Colors.black54),
+                  ),
+                ],
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildManagerRoomItem({
+    required String room,
+    required String tenant,
+    required String status,
+    required Color color,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Container(
+            width: 11,
+            height: 11,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  room,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$tenant - $status',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12, color: Colors.black54),
+                ),
+              ],
+            ),
+          ),
+          const Icon(Icons.chevron_right, color: Colors.black38),
+        ],
+      ),
+    );
+  }
+
+  void _openAdminUserList(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => const AdminUserListScreen()),
+    );
+  }
+
+  void _openAdminDeviceList(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => const AdminDeviceListScreen()),
+    );
+  }
+
+  void _openAdminBuildingRooms(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => const AdminBuildingRoomsScreen()),
+    );
+  }
+
+  void _openAdminSettings(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => const AdminSettingsScreen()),
+    );
+  }
+
+  // =========================================================================
+  // GIAO DIỆN 3: USER DASHBOARD (Dành riêng cho cư dân thuê phòng)
+  // =========================================================================
+  Widget _buildUserHome() {
+    return const RoomControlScreen();
   }
 
   // =========================================================================
@@ -632,5 +982,71 @@ class HomeScreen extends StatelessWidget {
         MaterialPageRoute(builder: (context) => const LoginScreen()),
       );
     }
+  }
+}
+
+class _AdminDashboardStats {
+  const _AdminDashboardStats({
+    required this.totalUsers,
+    required this.admins,
+    required this.managers,
+    required this.tenants,
+    required this.occupiedRooms,
+    required this.roomsWithCode,
+  });
+
+  final int totalUsers;
+  final int admins;
+  final int managers;
+  final int tenants;
+  final int occupiedRooms;
+  final int roomsWithCode;
+
+  static const int totalDevices = 7;
+  static const int onlineDevices = 7;
+  static const int offlineDevices = totalDevices - onlineDevices;
+  static const int onlineDevicePercent = totalDevices == 0
+      ? 0
+      : (onlineDevices * 100) ~/ totalDevices;
+
+  factory _AdminDashboardStats.fromUserDocs(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) {
+    var admins = 0;
+    var managers = 0;
+    var tenants = 0;
+    final roomCodes = <String>{};
+
+    for (final doc in docs) {
+      final data = doc.data();
+      final role = (data['role'] ?? 'user').toString();
+
+      switch (role) {
+        case 'admin':
+          admins++;
+          break;
+        case 'manager':
+          managers++;
+          break;
+        default:
+          tenants++;
+      }
+
+      final room = (data['room'] ?? data['roomCode'] ?? data['roomNumber'] ?? '')
+          .toString()
+          .trim();
+      if (room.isNotEmpty) {
+        roomCodes.add(room);
+      }
+    }
+
+    return _AdminDashboardStats(
+      totalUsers: docs.length,
+      admins: admins,
+      managers: managers,
+      tenants: tenants,
+      occupiedRooms: roomCodes.isNotEmpty ? roomCodes.length : tenants,
+      roomsWithCode: roomCodes.length,
+    );
   }
 }
