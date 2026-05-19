@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_keys.dart';
 import 'features/auth/screens/login_screen.dart'; // Import file màn hình đăng nhập của bạn
 import 'package:firebase_core/firebase_core.dart'; // Gọi thư viện lõi
 import 'firebase_options.dart'; // Gọi file cấu hình bí mật của Firebase
@@ -16,6 +17,7 @@ class SmartRoomApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Smart Room IoT',
+      scaffoldMessengerKey: rootScaffoldMessengerKey,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueAccent),
         useMaterial3: true, // Sử dụng phong cách thiết kế Material 3 hiện đại

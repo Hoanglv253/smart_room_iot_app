@@ -7,6 +7,7 @@ import '../../admin/screens/admin_settings_screen.dart';
 import '../../admin/screens/admin_user_list_screen.dart';
 import '../../auth/services/auth_service.dart';
 import '../../auth/screens/login_screen.dart';
+import '../../notifications/screens/notification_center_screen.dart';
 import '../../room/screens/room_control_screen.dart'; // Import màn hình phòng của user
 
 class HomeScreen extends StatelessWidget {
@@ -109,31 +110,7 @@ class HomeScreen extends StatelessWidget {
             icon: const Icon(Icons.settings, color: Colors.white, size: 21),
             onPressed: () => _openAdminSettings(context),
           ),
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              IconButton(
-                icon: const Icon(
-                  Icons.notifications,
-                  color: Colors.white,
-                  size: 21,
-                ),
-                onPressed: () {},
-              ),
-              Positioned(
-                right: 11,
-                top: 17,
-                child: Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: Colors.redAccent,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ),
-            ],
-          ),
+          _buildAdminNotificationButton(context),
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white, size: 21),
             onPressed: () => _handleLogout(context, authService),
@@ -206,46 +183,7 @@ class HomeScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            Card(
-              elevation: 1,
-              margin: EdgeInsets.zero,
-              color: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Hoạt Động Gần Đây',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _buildAdminActivityItem(
-                      color: const Color(0xFF1565C0),
-                      text: 'Admin thêm Quản lý: Nguyễn T.M.',
-                      time: '09:45',
-                    ),
-                    _buildAdminActivityItem(
-                      color: const Color(0xFF1565C0),
-                      text: 'Cập nhật firmware cảm biến P301',
-                      time: '10:12',
-                    ),
-                    _buildAdminActivityItem(
-                      color: Colors.redAccent,
-                      text: 'Lỗi cảm biến nhiệt độ P405',
-                      time: '10:30',
-                    ),
-                  ],
-                ),
-              ),
-            ),
+            _buildAdminRecentActivitySection(),
           ],
         ),
       ),
@@ -519,6 +457,196 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildAdminNotificationButton(BuildContext context) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('notifications')
+          .where('targetRoles', arrayContains: 'admin')
+          .snapshots(),
+      builder: (context, snapshot) {
+        final notifications = _AdminNotification.fromDocs(
+          snapshot.data?.docs ??
+              const <QueryDocumentSnapshot<Map<String, dynamic>>>[],
+        );
+
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            IconButton(
+              icon: const Icon(
+                Icons.notifications,
+                color: Colors.white,
+                size: 21,
+              ),
+              onPressed: () => _showAdminNotifications(
+                context,
+                notifications,
+              ),
+            ),
+            if (notifications.isNotEmpty)
+              Positioned(
+                right: 9,
+                top: 15,
+                child: Container(
+                  constraints: const BoxConstraints(minWidth: 16),
+                  height: 16,
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.redAccent,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.white, width: 1),
+                  ),
+                  child: Text(
+                    notifications.length > 9 ? '9+' : '${notifications.length}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w900,
+                      height: 1.35,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildAdminRecentActivitySection() {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('notifications')
+          .where('targetRoles', arrayContains: 'admin')
+          .snapshots(),
+      builder: (context, snapshot) {
+        final notifications = _AdminNotification.fromDocs(
+          snapshot.data?.docs ??
+              const <QueryDocumentSnapshot<Map<String, dynamic>>>[],
+        );
+        final visibleItems = notifications.take(4).toList();
+
+        return Card(
+          elevation: 1,
+          margin: EdgeInsets.zero,
+          color: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Hoạt Động Gần Đây',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                if (snapshot.connectionState == ConnectionState.waiting)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 10),
+                    child: LinearProgressIndicator(minHeight: 2),
+                  )
+                else if (visibleItems.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 10),
+                    child: Text(
+                      'Chưa có thông báo từ quản lý hoặc người thuê.',
+                      style: TextStyle(fontSize: 12, color: Colors.black54),
+                    ),
+                  )
+                else
+                  ...visibleItems.map(
+                    (item) => _buildAdminActivityItem(
+                      color: item.color,
+                      text: item.message,
+                      time: item.timeLabel,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showAdminNotifications(
+    BuildContext context,
+    List<_AdminNotification> notifications,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Thông báo từ quản lý và người thuê',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 10),
+                if (notifications.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Text(
+                      'Chưa có thông báo nào.',
+                      style: TextStyle(color: Colors.black54),
+                    ),
+                  )
+                else
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: notifications.length,
+                      separatorBuilder: (context, index) =>
+                          const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final item = notifications[index];
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: CircleAvatar(
+                            backgroundColor: item.color.withValues(alpha: 0.12),
+                            child: Icon(item.icon, color: item.color),
+                          ),
+                          title: Text(
+                            item.message,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          subtitle: Text(item.subtitle),
+                          trailing: Text(
+                            item.timeLabel,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.black54,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildAdminActionItem(
     IconData icon,
     String label,
@@ -642,14 +770,18 @@ class HomeScreen extends StatelessWidget {
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(
-              Icons.notifications,
-              color: Colors.white,
-              size: 21,
-            ),
-            onPressed: () {},
-          ),
+              IconButton(
+                icon: const Icon(
+                  Icons.notifications,
+                  color: Colors.white,
+                  size: 21,
+                ),
+                onPressed: () => _openNotificationCenter(
+                  context,
+                  role: 'manager',
+                  title: 'Thông Báo Quản Lý',
+                ),
+              ),
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white, size: 21),
             onPressed: () => _handleLogout(context, authService),
@@ -671,49 +803,7 @@ class HomeScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildManagerSummaryCard(
-                    icon: Icons.apartment,
-                    value: '32',
-                    label: 'Phòng đang thuê',
-                    color: const Color(0xFF1565C0),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _buildManagerSummaryCard(
-                    icon: Icons.warning_amber_rounded,
-                    value: '5',
-                    label: 'Yêu cầu sửa chữa',
-                    color: Colors.deepOrange,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildManagerSummaryCard(
-                    icon: Icons.receipt_long,
-                    value: '28',
-                    label: 'Hóa đơn đã thu',
-                    color: const Color(0xFF1A7F3F),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _buildManagerSummaryCard(
-                    icon: Icons.devices,
-                    value: '94%',
-                    label: 'Thiết bị online',
-                    color: const Color(0xFF26A69A),
-                  ),
-                ),
-              ],
-            ),
+            _buildManagerOverviewStats(),
             const SizedBox(height: 14),
             Card(
               elevation: 1,
@@ -752,6 +842,15 @@ class HomeScreen extends StatelessWidget {
                     Icons.campaign,
                     'Gửi\nThông Báo',
                     const Color(0xFF1565C0),
+                    onTap: () => showNotificationComposer(
+                      context: context,
+                      senderRole: 'manager',
+                      targetRoles: const ['user'],
+                      type: 'notice',
+                      title: 'Gửi thông báo cho người thuê',
+                      hintText: 'Nhập nội dung thông báo...',
+                      successMessage: 'Đã gửi thông báo cho người thuê.',
+                    ),
                   ),
                   _buildAdminActionItem(
                     Icons.analytics,
@@ -893,6 +992,89 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildManagerOverviewStats() {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance.collection('users').snapshots(),
+      builder: (context, snapshot) {
+        final users = snapshot.data?.docs ??
+            const <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+        final occupiedRooms = users
+            .map((doc) {
+              final data = doc.data();
+              return (data['roomNumber'] ?? data['room'] ?? '').toString();
+            })
+            .where((room) => room.trim().isNotEmpty)
+            .toSet()
+            .length;
+
+        return Column(
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: _buildManagerSummaryCard(
+                    icon: Icons.apartment,
+                    value: snapshot.connectionState == ConnectionState.waiting
+                        ? '...'
+                        : '$occupiedRooms',
+                    label: 'Phòng đang thuê',
+                    color: const Color(0xFF1565C0),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                    stream: FirebaseFirestore.instance
+                        .collection('notifications')
+                        .where('targetRoles', arrayContains: 'manager')
+                        .snapshots(),
+                    builder: (context, reportSnapshot) {
+                      final reportCount = (reportSnapshot.data?.docs ??
+                              const <QueryDocumentSnapshot<Map<String, dynamic>>>[])
+                          .where((doc) => doc.data()['type'] == 'report')
+                          .length;
+                      return _buildManagerSummaryCard(
+                        icon: Icons.warning_amber_rounded,
+                        value: reportSnapshot.connectionState ==
+                                ConnectionState.waiting
+                            ? '...'
+                            : '$reportCount',
+                        label: 'Báo cáo từ người thuê',
+                        color: Colors.deepOrange,
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildManagerSummaryCard(
+                    icon: Icons.receipt_long,
+                    value: '28',
+                    label: 'Hóa đơn đã thu',
+                    color: const Color(0xFF1A7F3F),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildManagerSummaryCard(
+                    icon: Icons.devices,
+                    value: '94%',
+                    label: 'Thiết bị online',
+                    color: const Color(0xFF26A69A),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildManagerRoomItem({
     required String room,
     required String tenant,
@@ -960,6 +1142,21 @@ class HomeScreen extends StatelessWidget {
   void _openAdminSettings(BuildContext context) {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (context) => const AdminSettingsScreen()),
+    );
+  }
+
+  void _openNotificationCenter(
+    BuildContext context, {
+    required String role,
+    required String title,
+  }) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => NotificationCenterScreen(
+          currentRole: role,
+          title: title,
+        ),
+      ),
     );
   }
 
@@ -1048,5 +1245,73 @@ class _AdminDashboardStats {
       occupiedRooms: roomCodes.isNotEmpty ? roomCodes.length : tenants,
       roomsWithCode: roomCodes.length,
     );
+  }
+}
+
+class _AdminNotification {
+  const _AdminNotification({
+    required this.message,
+    required this.subtitle,
+    required this.timeLabel,
+    required this.sortTime,
+    required this.color,
+    required this.icon,
+  });
+
+  final String message;
+  final String subtitle;
+  final String timeLabel;
+  final DateTime sortTime;
+  final Color color;
+  final IconData icon;
+
+  static List<_AdminNotification> fromDocs(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) {
+    final items = <_AdminNotification>[];
+
+    for (final doc in docs) {
+      final data = doc.data();
+      final role = (data['senderRole'] ?? '').toString();
+      final name = (data['senderName'] ?? 'Người dùng').toString();
+      final message = (data['message'] ?? '').toString();
+      final type = (data['type'] ?? 'notice').toString();
+      final timestamp = _readTimestamp(data['createdAt']) ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      final roleLabel = role == 'manager'
+          ? 'Quản lý'
+          : role == 'user'
+              ? 'Người thuê'
+              : 'Admin';
+
+      items.add(
+        _AdminNotification(
+          message: '$roleLabel $name: $message',
+          subtitle: type == 'report' ? 'Báo cáo từ người thuê' : 'Thông báo',
+          timeLabel: _formatTime(timestamp),
+          sortTime: timestamp,
+          color: type == 'report'
+              ? Colors.deepOrange
+              : const Color(0xFF1565C0),
+          icon: type == 'report' ? Icons.report : Icons.notifications,
+        ),
+      );
+    }
+
+    items.sort((a, b) => b.sortTime.compareTo(a.sortTime));
+    return items;
+  }
+
+  static DateTime? _readTimestamp(Object? value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    return null;
+  }
+
+  static String _formatTime(DateTime dateTime) {
+    if (dateTime.millisecondsSinceEpoch == 0) return 'Mới';
+    final hour = dateTime.hour.toString().padLeft(2, '0');
+    final minute = dateTime.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
   }
 }
