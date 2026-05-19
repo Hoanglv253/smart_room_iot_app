@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'admin_nav.dart';
 import 'admin_profile_screen.dart';
 import '../../auth/screens/login_screen.dart';
 import '../../auth/services/auth_service.dart';
@@ -13,7 +14,7 @@ class AdminSettingsScreen extends StatefulWidget {
 
 class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   final AuthService _authService = AuthService();
-  int _currentIndex = 4;
+  static const int _currentIndex = 4;
 
   static const Color _primaryBlue = Color(0xFF1565C0);
   static const Color _background = Color(0xFFF3F5F8);
@@ -190,13 +191,11 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (index) {
-          if (index == 0) {
-            Navigator.of(context).pop();
-            return;
-          }
-          setState(() => _currentIndex = index);
-        },
+        onTap: (index) => openAdminTab(
+          context,
+          currentIndex: _currentIndex,
+          targetIndex: index,
+        ),
         type: BottomNavigationBarType.fixed,
         selectedItemColor: _primaryBlue,
         unselectedItemColor: Colors.grey,

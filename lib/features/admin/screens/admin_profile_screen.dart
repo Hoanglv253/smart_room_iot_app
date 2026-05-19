@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/admin_profile_data.dart';
+import 'admin_nav.dart';
 
 class AdminProfileScreen extends StatefulWidget {
   const AdminProfileScreen({super.key});
@@ -33,7 +34,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
   );
 
   bool _isEditing = false;
-  int _currentIndex = 4;
+  static const int _currentIndex = 4;
 
   static const Color _primaryBlue = Color(0xFF1565C0);
   static const Color _background = Color(0xFFF3F5F8);
@@ -312,13 +313,11 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (index) {
-          if (index == 0) {
-            Navigator.of(context).popUntil((route) => route.isFirst);
-            return;
-          }
-          setState(() => _currentIndex = index);
-        },
+        onTap: (index) => openAdminTab(
+          context,
+          currentIndex: _currentIndex,
+          targetIndex: index,
+        ),
         type: BottomNavigationBarType.fixed,
         selectedItemColor: _primaryBlue,
         unselectedItemColor: Colors.grey,

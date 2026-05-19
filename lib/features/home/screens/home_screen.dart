@@ -7,6 +7,8 @@ import '../../admin/screens/admin_settings_screen.dart';
 import '../../admin/screens/admin_user_list_screen.dart';
 import '../../auth/services/auth_service.dart';
 import '../../auth/screens/login_screen.dart';
+import '../../manager/screens/manager_feature_screens.dart';
+import '../../manager/screens/manager_room_list_screen.dart';
 import '../../notifications/screens/notification_center_screen.dart';
 import '../../room/screens/room_control_screen.dart'; // Import màn hình phòng của user
 
@@ -822,21 +824,25 @@ class HomeScreen extends StatelessWidget {
                     Icons.meeting_room,
                     'Quản Lý\nPhòng',
                     const Color(0xFF1565C0),
+                    onTap: () => _openManagerRoomList(context),
                   ),
                   _buildAdminActionItem(
                     Icons.people,
                     'Người\nThuê',
                     const Color(0xFF1565C0),
+                    onTap: () => _openManagerTenantList(context),
                   ),
                   _buildAdminActionItem(
                     Icons.build,
                     'Yêu Cầu\nSửa Chữa',
                     Colors.deepOrange,
+                    onTap: () => _openManagerRepairRequests(context),
                   ),
                   _buildAdminActionItem(
                     Icons.electric_bolt,
                     'Điện Nước',
                     const Color(0xFF1565C0),
+                    onTap: () => _openManagerBills(context),
                   ),
                   _buildAdminActionItem(
                     Icons.campaign,
@@ -856,54 +862,13 @@ class HomeScreen extends StatelessWidget {
                     Icons.analytics,
                     'Báo Cáo',
                     const Color(0xFF1565C0),
+                    onTap: () => _openManagerBills(context),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 14),
-            Card(
-              elevation: 1,
-              margin: EdgeInsets.zero,
-              color: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 14, 14, 4),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Phòng Cần Theo Dõi',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _buildManagerRoomItem(
-                      room: 'P501 - Block A',
-                      tenant: 'Hoàng T.M.',
-                      status: 'Máy lạnh đang bật',
-                      color: const Color(0xFF1565C0),
-                    ),
-                    _buildManagerRoomItem(
-                      room: 'P302 - Block A',
-                      tenant: 'Nguyễn M.K.',
-                      status: 'Chưa thanh toán điện',
-                      color: Colors.deepOrange,
-                    ),
-                    _buildManagerRoomItem(
-                      room: 'P405 - Block B',
-                      tenant: 'Trần H.A.',
-                      status: 'Báo lỗi cảm biến',
-                      color: Colors.redAccent,
-                    ),
-                  ],
-                ),
-              ),
-            ),
+            _buildManagerWatchRoomsSection(),
           ],
         ),
       ),
@@ -911,7 +876,13 @@ class HomeScreen extends StatelessWidget {
         currentIndex: 0,
         onTap: (index) {
           if (index == 1) {
-            _openAdminUserList(context);
+            _openManagerRoomList(context);
+          } else if (index == 2) {
+            _openManagerRepairRequests(context);
+          } else if (index == 3) {
+            _openManagerBills(context);
+          } else if (index == 4) {
+            _openManagerSettings(context);
           }
         },
         type: BottomNavigationBarType.fixed,
@@ -1075,6 +1046,83 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildManagerWatchRoomsSection() {
+    return Card(
+      elevation: 1,
+      margin: EdgeInsets.zero,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 4),
+        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance.collection('users').snapshots(),
+          builder: (context, snapshot) {
+            final users = snapshot.data?.docs ??
+                const <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+            final roomMembers = <String, List<Map<String, dynamic>>>{};
+
+            for (final doc in users) {
+              final data = doc.data();
+              final room = (data['room'] ?? data['roomNumber'] ?? '')
+                  .toString()
+                  .trim();
+              final role = (data['role'] ?? 'user').toString();
+              if (room.isEmpty || role == 'admin') continue;
+              roomMembers.putIfAbsent(room, () => []).add(data);
+            }
+
+            final rooms = roomMembers.entries.toList()
+              ..sort((a, b) => a.key.compareTo(b.key));
+            final visibleRooms = rooms.take(4).toList();
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Phòng Cần Theo Dõi',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                if (snapshot.connectionState == ConnectionState.waiting)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 12),
+                    child: LinearProgressIndicator(minHeight: 2),
+                  )
+                else if (visibleRooms.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      'Chưa có phòng nào được gán người thuê.',
+                      style: TextStyle(color: Colors.black54),
+                    ),
+                  )
+                else
+                  ...visibleRooms.map((entry) {
+                    final firstMember = entry.value.first;
+                    final tenantName =
+                        (firstMember['name'] ?? firstMember['email'] ?? '')
+                            .toString();
+                    return _buildManagerRoomItem(
+                      room: entry.key.startsWith('Phòng')
+                          ? entry.key
+                          : 'Phòng ${entry.key}',
+                      tenant: tenantName,
+                      status: '${entry.value.length} thành viên',
+                      color: const Color(0xFF1565C0),
+                    );
+                  }),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   Widget _buildManagerRoomItem({
     required String room,
     required String tenant,
@@ -1124,6 +1172,36 @@ class HomeScreen extends StatelessWidget {
   void _openAdminUserList(BuildContext context) {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (context) => const AdminUserListScreen()),
+    );
+  }
+
+  void _openManagerRoomList(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => const ManagerRoomListScreen()),
+    );
+  }
+
+  void _openManagerTenantList(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => const ManagerTenantListScreen()),
+    );
+  }
+
+  void _openManagerRepairRequests(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => const ManagerRepairRequestScreen()),
+    );
+  }
+
+  void _openManagerBills(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => const ManagerBillListScreen()),
+    );
+  }
+
+  void _openManagerSettings(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => const ManagerSettingsScreen()),
     );
   }
 

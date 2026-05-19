@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../app_keys.dart';
+import '../../../core/services/app_firestore_service.dart';
 
 class NotificationCenterScreen extends StatelessWidget {
   const NotificationCenterScreen({
@@ -29,55 +30,24 @@ class NotificationCenterScreen extends StatelessWidget {
         foregroundColor: Colors.white,
         title: Text(title),
       ),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
-            .collection('notifications')
-            .where('targetRoles', arrayContains: currentRole)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          if (snapshot.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Text(
-                  'Không tải được thông báo: ${snapshot.error}',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.redAccent),
-                ),
-              ),
-            );
-          }
-
-          final notifications =
-              (snapshot.data?.docs ??
-                      const <QueryDocumentSnapshot<Map<String, dynamic>>>[])
-                  .map((doc) => AppNotification.fromFirestore(doc.data()))
-                  .toList()
-                ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-
-          if (notifications.isEmpty) {
-            return const Center(
-              child: Text(
-                'Chưa có thông báo nào.',
-                style: TextStyle(color: Colors.black54),
-              ),
-            );
-          }
-
-          return ListView.separated(
-            padding: const EdgeInsets.all(12),
-            itemCount: notifications.length,
-            separatorBuilder: (context, index) => const SizedBox(height: 8),
-            itemBuilder: (context, index) {
-              return _NotificationCard(notification: notifications[index]);
-            },
-          );
-        },
-      ),
+      body: currentRole == 'user'
+          ? StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+              stream: AppFirestoreService.users
+                  .doc(FirebaseAuth.instance.currentUser?.uid)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                final data = snapshot.data?.data();
+                final rawRoomNumber = data?['roomNumber'];
+                final roomNumber = rawRoomNumber is int
+                    ? rawRoomNumber
+                    : int.tryParse(rawRoomNumber?.toString() ?? '');
+                return _NotificationList(
+                  currentRole: currentRole,
+                  currentRoomNumber: roomNumber,
+                );
+              },
+            )
+          : _NotificationList(currentRole: currentRole),
       floatingActionButton: canSendReport
           ? FloatingActionButton.extended(
               backgroundColor: _primaryBlue,
@@ -97,6 +67,72 @@ class NotificationCenterScreen extends StatelessWidget {
               ),
             )
           : null,
+    );
+  }
+}
+
+class _NotificationList extends StatelessWidget {
+  const _NotificationList({
+    required this.currentRole,
+    this.currentRoomNumber,
+  });
+
+  final String currentRole;
+  final int? currentRoomNumber;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: AppFirestoreService.notifications
+          .where('targetRoles', arrayContains: currentRole)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Text(
+                'Không tải được thông báo: ${snapshot.error}',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.redAccent),
+              ),
+            ),
+          );
+        }
+
+        final notifications = (snapshot.data?.docs ??
+                const <QueryDocumentSnapshot<Map<String, dynamic>>>[])
+            .map((doc) => AppNotification.fromFirestore(doc.data()))
+            .where((notification) {
+              if (currentRole != 'user') return true;
+              final targetRoom = notification.targetRoomNumber;
+              return targetRoom == null || targetRoom == currentRoomNumber;
+            })
+            .toList()
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+        if (notifications.isEmpty) {
+          return const Center(
+            child: Text(
+              'Chưa có thông báo nào.',
+              style: TextStyle(color: Colors.black54),
+            ),
+          );
+        }
+
+        return ListView.separated(
+          padding: const EdgeInsets.all(12),
+          itemCount: notifications.length,
+          separatorBuilder: (context, index) => const SizedBox(height: 8),
+          itemBuilder: (context, index) {
+            return _NotificationCard(notification: notifications[index]);
+          },
+        );
+      },
     );
   }
 }
@@ -149,6 +185,7 @@ class _NotificationComposerScreen extends StatefulWidget {
 class _NotificationComposerScreenState
     extends State<_NotificationComposerScreen> {
   final TextEditingController _controller = TextEditingController();
+  bool _isSending = false;
 
   @override
   void dispose() {
@@ -156,7 +193,7 @@ class _NotificationComposerScreenState
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     final message = _controller.text.trim();
     if (message.isEmpty) {
       _showRootSnackBar(
@@ -165,25 +202,27 @@ class _NotificationComposerScreenState
       return;
     }
 
-    Navigator.of(context).pop();
-    _showRootSnackBar(
-      const SnackBar(
-        duration: Duration(seconds: 2),
-        content: Text('Đang gửi thông báo...'),
-      ),
-    );
-
-    unawaited(
-      Future<void>.delayed(const Duration(milliseconds: 300), () {
-        return _sendNotification(
-          message: message,
-          senderRole: widget.senderRole,
-          targetRoles: widget.targetRoles,
-          type: widget.type,
-          successMessage: widget.successMessage,
-        );
-      }),
-    );
+    setState(() => _isSending = true);
+    try {
+      await AppFirestoreService.sendNotification(
+        message: message,
+        senderRole: widget.senderRole,
+        targetRoles: widget.targetRoles,
+        type: widget.type,
+      );
+      _showRootSnackBar(SnackBar(content: Text(widget.successMessage)));
+      if (mounted) Navigator.of(context).pop();
+    } on TimeoutException {
+      _showRootSnackBar(
+        const SnackBar(
+          content: Text('Gửi quá lâu. Kiểm tra mạng hoặc quyền Firestore.'),
+        ),
+      );
+    } catch (e) {
+      _showRootSnackBar(SnackBar(content: Text('Không gửi được: $e')));
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+    }
   }
 
   @override
@@ -201,6 +240,7 @@ class _NotificationComposerScreenState
           children: [
             TextField(
               controller: _controller,
+              enabled: !_isSending,
               minLines: 6,
               maxLines: 10,
               textInputAction: TextInputAction.newline,
@@ -218,51 +258,21 @@ class _NotificationComposerScreenState
               width: double.infinity,
               height: 48,
               child: FilledButton.icon(
-                onPressed: _submit,
-                icon: const Icon(Icons.send),
-                label: const Text('Gửi'),
+                onPressed: _isSending ? null : _submit,
+                icon: _isSending
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.send),
+                label: Text(_isSending ? 'Đang gửi...' : 'Gửi'),
               ),
             ),
           ],
         ),
       ),
     );
-  }
-}
-
-Future<void> _sendNotification({
-  required String message,
-  required String senderRole,
-  required List<String> targetRoles,
-  required String type,
-  required String successMessage,
-}) async {
-  try {
-    final user = FirebaseAuth.instance.currentUser;
-    await FirebaseFirestore.instance
-        .collection('notifications')
-        .add({
-          'message': message,
-          'senderRole': senderRole,
-          'senderName': user?.displayName ?? user?.email ?? 'Người dùng',
-          'senderEmail': user?.email ?? '',
-          'targetRoles': targetRoles,
-          'type': type,
-          'createdAt': FieldValue.serverTimestamp(),
-        })
-        .timeout(const Duration(seconds: 10));
-
-    _showRootSnackBar(SnackBar(content: Text(successMessage)));
-  } on TimeoutException {
-    _showRootSnackBar(
-      const SnackBar(
-        content: Text(
-          'Gửi quá lâu. Kiểm tra mạng hoặc quyền ghi Firestore.',
-        ),
-      ),
-    );
-  } catch (e) {
-    _showRootSnackBar(SnackBar(content: Text('Không gửi được: $e')));
   }
 }
 
@@ -279,6 +289,7 @@ class AppNotification {
     required this.senderName,
     required this.type,
     required this.createdAt,
+    required this.targetRoomNumber,
   });
 
   final String message;
@@ -286,9 +297,11 @@ class AppNotification {
   final String senderName;
   final String type;
   final DateTime createdAt;
+  final int? targetRoomNumber;
 
   factory AppNotification.fromFirestore(Map<String, dynamic> data) {
     final timestamp = data['createdAt'];
+    final rawTargetRoom = data['targetRoomNumber'] ?? data['roomNumber'];
     return AppNotification(
       message: (data['message'] ?? '').toString(),
       senderRole: (data['senderRole'] ?? '').toString(),
@@ -297,6 +310,9 @@ class AppNotification {
       createdAt: timestamp is Timestamp
           ? timestamp.toDate()
           : DateTime.fromMillisecondsSinceEpoch(0),
+      targetRoomNumber: rawTargetRoom is int
+          ? rawTargetRoom
+          : int.tryParse(rawTargetRoom?.toString() ?? ''),
     );
   }
 
@@ -314,11 +330,15 @@ class AppNotification {
   }
 
   Color get color {
-    return type == 'report' ? Colors.deepOrange : _NotificationCard._primaryBlue;
+    if (type == 'report') return Colors.deepOrange;
+    if (type == 'bill') return Colors.green;
+    return _NotificationCard._primaryBlue;
   }
 
   IconData get icon {
-    return type == 'report' ? Icons.report : Icons.notifications;
+    if (type == 'report') return Icons.report;
+    if (type == 'bill') return Icons.receipt_long;
+    return Icons.notifications;
   }
 
   String get timeLabel {
