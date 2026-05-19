@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../auth/screens/login_screen.dart';
 import '../../auth/services/auth_service.dart';
+import '../../notifications/screens/notification_center_screen.dart';
 
 class RoomControlScreen extends StatefulWidget {
   const RoomControlScreen({super.key});
@@ -366,7 +367,21 @@ class _RoomControlScreenState extends State<RoomControlScreen> {
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
+        onTap: (index) {
+          if (index == 3) {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => const NotificationCenterScreen(
+                  currentRole: 'user',
+                  title: 'Thông Báo Người Thuê',
+                  canSendReport: true,
+                ),
+              ),
+            );
+            return;
+          }
+          setState(() => _currentIndex = index);
+        },
         type: BottomNavigationBarType.fixed,
         backgroundColor: Colors.white,
         selectedItemColor: _primaryBlue,
