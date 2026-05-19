@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../models/admin_profile_data.dart';
+import 'admin_nav.dart';
 
 class AdminBuildingRoomsScreen extends StatefulWidget {
   const AdminBuildingRoomsScreen({super.key});
@@ -12,7 +13,7 @@ class AdminBuildingRoomsScreen extends StatefulWidget {
 }
 
 class _AdminBuildingRoomsScreenState extends State<AdminBuildingRoomsScreen> {
-  int _currentIndex = 0;
+  static const int _currentIndex = 0;
 
   static const Color _primaryBlue = Color(0xFF1565C0);
   static const Color _background = Color(0xFFF3F5F8);
@@ -151,13 +152,11 @@ class _AdminBuildingRoomsScreenState extends State<AdminBuildingRoomsScreen> {
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (index) {
-          if (index == 0) {
-            Navigator.of(context).pop();
-            return;
-          }
-          setState(() => _currentIndex = index);
-        },
+        onTap: (index) => openAdminTab(
+          context,
+          currentIndex: _currentIndex,
+          targetIndex: index,
+        ),
         type: BottomNavigationBarType.fixed,
         selectedItemColor: _primaryBlue,
         unselectedItemColor: Colors.grey,
@@ -168,7 +167,10 @@ class _AdminBuildingRoomsScreenState extends State<AdminBuildingRoomsScreen> {
         unselectedLabelStyle: const TextStyle(fontSize: 12),
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Trang Chủ'),
-          BottomNavigationBarItem(icon: Icon(Icons.groups), label: 'Người Dùng'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.groups),
+            label: 'Người Dùng',
+          ),
           BottomNavigationBarItem(icon: Icon(Icons.devices), label: 'Thiết Bị'),
           BottomNavigationBarItem(
             icon: Icon(Icons.description),
@@ -252,7 +254,8 @@ class AdminRoomDetailScreen extends StatelessWidget {
                   _SectionTitle(
                     title: 'THÀNH VIÊN TRONG PHÒNG',
                     actionLabel: 'Thêm',
-                    onAction: () => _showAddMemberSheet(context, availableUsers),
+                    onAction: () =>
+                        _showAddMemberSheet(context, availableUsers),
                   ),
                   const SizedBox(height: 8),
                   if (snapshot.connectionState == ConnectionState.waiting)
@@ -265,7 +268,8 @@ class AdminRoomDetailScreen extends StatelessWidget {
                         padding: const EdgeInsets.only(bottom: 8),
                         child: _MemberCard(
                           member: member,
-                          onDelete: () => _removeMemberFromRoom(context, member),
+                          onDelete: () =>
+                              _removeMemberFromRoom(context, member),
                         ),
                       ),
                     ),
@@ -318,8 +322,9 @@ class AdminRoomDetailScreen extends StatelessWidget {
                         final user = users[index];
                         return ListTile(
                           leading: CircleAvatar(
-                            backgroundColor:
-                                const Color(0xFF1565C0).withValues(alpha: 0.12),
+                            backgroundColor: const Color(
+                              0xFF1565C0,
+                            ).withValues(alpha: 0.12),
                             child: Text(user.initials),
                           ),
                           title: Text(user.name),
@@ -414,8 +419,9 @@ class _RegisteredUser {
         : int.tryParse((rawRoomNumber ?? '').toString());
     return _RegisteredUser(
       id: id,
-      name: (data['name'] ?? data['displayName'] ?? data['email'] ?? 'Không tên')
-          .toString(),
+      name:
+          (data['name'] ?? data['displayName'] ?? data['email'] ?? 'Không tên')
+              .toString(),
       email: (data['email'] ?? '').toString(),
       role: (data['role'] ?? 'user').toString(),
       roomNumber: parsedRoomNumber,

@@ -1,6 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/services/app_firestore_service.dart';
+import '../models/admin_profile_data.dart';
+import 'admin_nav.dart';
+
 class AdminUserListScreen extends StatefulWidget {
   const AdminUserListScreen({super.key});
 
@@ -13,7 +17,7 @@ class _AdminUserListScreenState extends State<AdminUserListScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   String _keyword = '';
   String _roleFilter = 'all';
-  int _currentIndex = 1;
+  static const int _currentIndex = 1;
 
   static const Color _primaryBlue = Color(0xFF1565C0);
 
@@ -255,13 +259,11 @@ class _AdminUserListScreenState extends State<AdminUserListScreen> {
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (index) {
-          if (index == 0) {
-            Navigator.of(context).pop();
-            return;
-          }
-          setState(() => _currentIndex = index);
-        },
+        onTap: (index) => openAdminTab(
+          context,
+          currentIndex: _currentIndex,
+          targetIndex: index,
+        ),
         type: BottomNavigationBarType.fixed,
         selectedItemColor: _primaryBlue,
         unselectedItemColor: Colors.grey,
@@ -381,6 +383,26 @@ class _AdminUserListScreenState extends State<AdminUserListScreen> {
                   style: const TextStyle(fontSize: 12, color: Colors.black54),
                 ),
                 const SizedBox(height: 12),
+                if (user.role != 'admin')
+                  _ActionTile(
+                    icon: Icons.meeting_room,
+                    color: _primaryBlue,
+                    title: user.roomNumber == null
+                        ? 'Gắn phòng'
+                        : 'Đổi phòng đang gắn',
+                    subtitle: user.roomNumber == null
+                        ? 'Chọn phòng cho tài khoản này theo dữ liệu admin.'
+                        : 'Hiện tại: ${user.roomDisplay}',
+                    onTap: () => _showAssignRoomSheet(user),
+                  ),
+                if (user.role != 'admin' && user.roomNumber != null)
+                  _ActionTile(
+                    icon: Icons.link_off,
+                    color: Colors.deepOrange,
+                    title: 'Gỡ phòng',
+                    subtitle: 'Đưa tài khoản này về trạng thái chưa gán phòng.',
+                    onTap: () => _clearUserRoom(user),
+                  ),
                 if (user.role == 'user')
                   _ActionTile(
                     icon: Icons.workspace_premium,
@@ -437,6 +459,97 @@ class _AdminUserListScreenState extends State<AdminUserListScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Cập nhật thất bại: $e')));
+    }
+  }
+
+  void _showAssignRoomSheet(_AdminUser user) {
+    Navigator.of(context).pop();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        builder: (context) {
+          return SafeArea(
+            child: ListView.separated(
+              shrinkWrap: true,
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+              itemCount: AdminProfileData.roomCount,
+              separatorBuilder: (context, index) =>
+                  const Divider(height: 1, color: Color(0xFFE7EAF0)),
+              itemBuilder: (context, index) {
+                final roomNumber = index + 1;
+                final selected = user.roomNumber == roomNumber;
+                final roomName = AppFirestoreService.roomName(roomNumber);
+                return ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: selected
+                        ? _primaryBlue
+                        : _primaryBlue.withValues(alpha: 0.12),
+                    child: Icon(
+                      selected ? Icons.check : Icons.meeting_room,
+                      color: selected ? Colors.white : _primaryBlue,
+                    ),
+                  ),
+                  title: Text(
+                    roomName,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  subtitle: Text(
+                    selected
+                        ? 'Đang gắn với tài khoản này'
+                        : 'Gắn ${user.name} vào $roomName',
+                  ),
+                  onTap: selected
+                      ? () => Navigator.of(context).pop()
+                      : () => _assignRoomToUser(user, roomNumber),
+                );
+              },
+            ),
+          );
+        },
+      );
+    });
+  }
+
+  Future<void> _assignRoomToUser(_AdminUser user, int roomNumber) async {
+    final roomName = AppFirestoreService.roomName(roomNumber);
+    Navigator.of(context).pop();
+    try {
+      await _firestore.collection('users').doc(user.id).update({
+        'roomNumber': roomNumber,
+        'room': roomName,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Đã gắn ${user.name} vào $roomName.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Gắn phòng thất bại: $e')));
+    }
+  }
+
+  Future<void> _clearUserRoom(_AdminUser user) async {
+    Navigator.of(context).pop();
+    try {
+      await _firestore.collection('users').doc(user.id).update({
+        'roomNumber': FieldValue.delete(),
+        'room': FieldValue.delete(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Đã gỡ phòng khỏi ${user.name}.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Gỡ phòng thất bại: $e')));
     }
   }
 
@@ -757,6 +870,22 @@ class _AdminUser {
     if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
     return '${parts.first.substring(0, 1)}${parts.last.substring(0, 1)}'
         .toUpperCase();
+  }
+
+  int? get roomNumber {
+    final text = room.trim();
+    if (text.isEmpty) return null;
+    final direct = int.tryParse(text);
+    if (direct != null) return direct;
+    final match = RegExp(r'\d+').firstMatch(text);
+    return match == null ? null : int.tryParse(match.group(0)!);
+  }
+
+  String get roomDisplay {
+    final number = roomNumber;
+    if (number != null) return AppFirestoreService.roomName(number);
+    if (room.isNotEmpty) return room;
+    return 'Chưa gán phòng';
   }
 
   String get contactDisplay {

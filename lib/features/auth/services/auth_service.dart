@@ -1,28 +1,26 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // Import Firestore
 import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+
+import '../../../core/services/app_firestore_service.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email']);
-  final FirebaseFirestore _firestore =
-      FirebaseFirestore.instance; // Khởi tạo Database
 
-  // ================= 1. ĐĂNG NHẬP BẰNG EMAIL =================
   Future<User?> loginWithEmail(String email, String password) async {
     try {
-      UserCredential userCredential = await _auth.signInWithEmailAndPassword(
+      final credential = await _auth.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
-      return userCredential.user;
+      return credential.user;
     } on FirebaseAuthException catch (e) {
       throw Exception(e.message ?? 'Đăng nhập thất bại');
     }
   }
 
-  // ================= 2. ĐĂNG KÝ BẰNG EMAIL (NEW) =================
   Future<User?> registerWithEmail(
     String email,
     String password,
@@ -30,25 +28,20 @@ class AuthService {
     String role,
   ) async {
     try {
-      // 1. Tạo tài khoản trên Firebase Auth
-      UserCredential userCredential = await _auth
-          .createUserWithEmailAndPassword(email: email, password: password);
+      final credential = await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      final user = credential.user;
 
-      User? user = userCredential.user;
-
-      // 2. Cập nhật tên hiển thị (displayName) cho Auth
       if (user != null) {
         await user.updateDisplayName(name);
-
-        // 3. Lưu thông tin và QUYỀN (Role) vào Firestore Database
-        // Mặc định người mới đăng ký sẽ có role là 'user'
-        await _firestore.collection('users').doc(user.uid).set({
-          'uid': user.uid,
-          'email': user.email,
-          'name': name,
-          'role': role,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
+        await _upsertUserProfile(
+          uid: user.uid,
+          email: user.email ?? email,
+          name: name,
+          role: role,
+        );
       }
 
       return user;
@@ -57,39 +50,29 @@ class AuthService {
     }
   }
 
-  // ================= 3. ĐĂNG NHẬP BẰNG GOOGLE =================
   Future<User?> loginWithGoogle() async {
     try {
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      final googleUser = await _googleSignIn.signIn();
       if (googleUser == null) return null;
 
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
-      final AuthCredential credential = GoogleAuthProvider.credential(
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
-      UserCredential userCredential = await _auth.signInWithCredential(
-        credential,
-      );
-      User? user = userCredential.user;
+      final userCredential = await _auth.signInWithCredential(credential);
+      final user = userCredential.user;
 
-      // KHI ĐĂNG NHẬP GOOGLE: Kiểm tra xem user này đã có trong Database chưa
-      // Nếu chưa có (người mới) thì tạo cho họ 1 record với role là 'user'
       if (user != null) {
-        DocumentSnapshot userDoc = await _firestore
-            .collection('users')
-            .doc(user.uid)
-            .get();
+        final userDoc = await AppFirestoreService.users.doc(user.uid).get();
         if (!userDoc.exists) {
-          await _firestore.collection('users').doc(user.uid).set({
-            'uid': user.uid,
-            'email': user.email,
-            'name': user.displayName ?? 'Người dùng Google',
-            'role': 'user',
-            'createdAt': FieldValue.serverTimestamp(),
-          });
+          await _upsertUserProfile(
+            uid: user.uid,
+            email: user.email ?? googleUser.email,
+            name: user.displayName ?? googleUser.displayName ?? 'Người dùng',
+            role: 'user',
+          );
         }
       }
 
@@ -100,26 +83,35 @@ class AuthService {
     }
   }
 
-  // ================= 4. KIỂM TRA QUYỀN (NEW) =================
-  // Hàm này để lấy role của user hiện tại, dùng để ẩn/hiện nút điều khiển
   Future<String> getUserRole(String uid) async {
     try {
-      DocumentSnapshot doc = await _firestore
-          .collection('users')
-          .doc(uid)
-          .get();
-      if (doc.exists) {
-        return doc.get('role') ?? 'user';
-      }
-      return 'user';
-    } catch (e) {
+      final doc = await AppFirestoreService.users.doc(uid).get();
+      if (!doc.exists) return 'user';
+      final data = doc.data();
+      return (data?['role'] ?? 'user').toString();
+    } catch (_) {
       return 'user';
     }
   }
 
-  // ================= 5. ĐĂNG XUẤT =================
   Future<void> logout() async {
     await _googleSignIn.signOut();
     await _auth.signOut();
+  }
+
+  Future<void> _upsertUserProfile({
+    required String uid,
+    required String email,
+    required String name,
+    required String role,
+  }) async {
+    await AppFirestoreService.users.doc(uid).set({
+      'uid': uid,
+      'email': email,
+      'name': name,
+      'role': role,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 }

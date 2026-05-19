@@ -1,5 +1,8 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../core/services/app_firestore_service.dart';
 import '../../auth/screens/login_screen.dart';
 import '../../auth/services/auth_service.dart';
 import '../../notifications/screens/notification_center_screen.dart';
@@ -54,56 +57,10 @@ class _RoomControlScreenState extends State<RoomControlScreen> {
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.white, width: 1.4),
               ),
-              child: const Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'H',
-                    style: TextStyle(
-                      color: Color(0xFF4C3A24),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      height: 0.92,
-                    ),
-                  ),
-                  Text(
-                    'P501',
-                    style: TextStyle(
-                      color: Color(0xFF4C3A24),
-                      fontSize: 8,
-                      fontWeight: FontWeight.w700,
-                      height: 1.05,
-                    ),
-                  ),
-                ],
-              ),
+              child: const _TenantAvatarBadge(),
             ),
             const SizedBox(width: 9),
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'IoT CHUNG CƯ - BẢNG ĐIỀU KHIỂN NGƯỜI THUÊ',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0,
-                    ),
-                  ),
-                  SizedBox(height: 2),
-                  Text(
-                    'Người Thuê: Hoàng T.M. (Phòng 501 - Block A)',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 11.2, color: Colors.white70),
-                  ),
-                ],
-              ),
-            ),
+            const Expanded(child: _TenantAppBarTitle()),
           ],
         ),
         actions: [
@@ -121,19 +78,7 @@ class _RoomControlScreenState extends State<RoomControlScreen> {
           padding: const EdgeInsets.fromLTRB(10, 10, 10, 16),
           child: Column(
             children: [
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Người Thuê: Hoàng T.M. (Phòng 501 - Block A)',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.black87,
-                  ),
-                ),
-              ),
+              const _TenantHeaderLine(),
               const SizedBox(height: 8),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -165,9 +110,9 @@ class _RoomControlScreenState extends State<RoomControlScreen> {
                   ),
                   const SizedBox(width: 9),
                   Expanded(
-                    child: _DeviceCard(
+                    child: _TenantControlledDeviceCard(
                       height: 156,
-                      title: 'Đèn Chính (P501)',
+                      deviceName: 'Đèn Chính',
                       isOn: _lightOn,
                       status: 'Đang bật',
                       icon: Icons.lightbulb,
@@ -186,7 +131,7 @@ class _RoomControlScreenState extends State<RoomControlScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const _CardTitle(title: 'Quạt Trần (P501)'),
+                          const _TenantCardTitle(deviceName: 'Quạt Trần'),
                           const SizedBox(height: 8),
                           _SegmentSwitch(
                             value: _fanOn,
@@ -243,7 +188,7 @@ class _RoomControlScreenState extends State<RoomControlScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const _CardTitle(title: 'Máy Lạnh (P501)'),
+                          const _TenantCardTitle(deviceName: 'Máy Lạnh'),
                           const SizedBox(height: 8),
                           _SegmentSwitch(
                             value: _acOn,
@@ -306,54 +251,7 @@ class _RoomControlScreenState extends State<RoomControlScreen> {
                 ],
               ),
               const SizedBox(height: 9),
-              Row(
-                children: const [
-                  Expanded(
-                    child: _DashboardCard(
-                      height: 58,
-                      child: Center(
-                        child: Text(
-                          'Tiêu Thụ Điện T5',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: 9),
-                  Expanded(
-                    child: _DashboardCard(
-                      height: 58,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            '120 kWh',
-                            style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w900,
-                              height: 1,
-                            ),
-                          ),
-                          SizedBox(height: 3),
-                          Text(
-                            'Hóa đơn: Đã thanh toán',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Color(0xFF1A7F3F),
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              const _TenantBillSummary(),
               const SizedBox(height: 9),
               const _DashboardCard(
                 child: Padding(
@@ -375,6 +273,32 @@ class _RoomControlScreenState extends State<RoomControlScreen> {
                   currentRole: 'user',
                   title: 'Thông Báo Người Thuê',
                   canSendReport: true,
+                ),
+              ),
+            );
+            return;
+          }
+          if (index == 1) {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => const _TenantDevicesScreen(),
+              ),
+            );
+            return;
+          }
+          if (index == 2) {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => const _TenantBillDetailScreen(),
+              ),
+            );
+            return;
+          }
+          if (index == 4) {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => _TenantSettingsScreen(
+                  onLogout: _handleLogout,
                 ),
               ),
             );
@@ -404,6 +328,758 @@ class _RoomControlScreenState extends State<RoomControlScreen> {
           ),
           BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Cài Đặt'),
         ],
+      ),
+    );
+  }
+}
+
+class _TenantDashboardData {
+  const _TenantDashboardData({
+    required this.name,
+    required this.email,
+    required this.roomNumber,
+  });
+
+  final String name;
+  final String email;
+  final int? roomNumber;
+
+  factory _TenantDashboardData.fromMap(Map<String, dynamic>? data) {
+    final user = FirebaseAuth.instance.currentUser;
+    final email = (data?['email'] ?? user?.email ?? '').toString();
+    final rawRoomNumber = data?['roomNumber'];
+    final parsedRoomNumber = rawRoomNumber is int
+        ? rawRoomNumber
+        : int.tryParse(rawRoomNumber?.toString() ?? '');
+
+    return _TenantDashboardData(
+      name: (data?['name'] ?? data?['displayName'] ?? user?.displayName ?? email)
+          .toString(),
+      email: email,
+      roomNumber: parsedRoomNumber,
+    );
+  }
+
+  String get initials {
+    final source = name.trim().isNotEmpty ? name.trim() : email.trim();
+    if (source.isEmpty) return 'U';
+    return source.substring(0, 1).toUpperCase();
+  }
+
+  String get roomBadge {
+    if (roomNumber == null) return '---';
+    return 'P${roomNumber.toString().padLeft(3, '0')}';
+  }
+
+  String get roomName {
+    if (roomNumber == null) return 'Chưa gán phòng';
+    return AppFirestoreService.roomName(roomNumber!);
+  }
+
+  String get headerLine => 'Người Thuê: $name ($roomName)';
+}
+
+class _TenantInfoBuilder extends StatelessWidget {
+  const _TenantInfoBuilder({required this.builder});
+
+  final Widget Function(BuildContext context, _TenantDashboardData tenant)
+      builder;
+
+  @override
+  Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      return builder(context, _TenantDashboardData.fromMap(null));
+    }
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: AppFirestoreService.users.doc(uid).snapshots(),
+      builder: (context, snapshot) {
+        return builder(
+          context,
+          _TenantDashboardData.fromMap(snapshot.data?.data()),
+        );
+      },
+    );
+  }
+}
+
+class _TenantAvatarBadge extends StatelessWidget {
+  const _TenantAvatarBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return _TenantInfoBuilder(
+      builder: (context, tenant) {
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              tenant.initials,
+              style: const TextStyle(
+                color: Color(0xFF4C3A24),
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                height: 0.92,
+              ),
+            ),
+            Text(
+              tenant.roomBadge,
+              style: const TextStyle(
+                color: Color(0xFF4C3A24),
+                fontSize: 8,
+                fontWeight: FontWeight.w700,
+                height: 1.05,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _TenantAppBarTitle extends StatelessWidget {
+  const _TenantAppBarTitle();
+
+  @override
+  Widget build(BuildContext context) {
+    return _TenantInfoBuilder(
+      builder: (context, tenant) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              'IoT CHUNG CƯ - BẢNG ĐIỀU KHIỂN NGƯỜI THUÊ',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              tenant.headerLine,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11.2, color: Colors.white70),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _TenantHeaderLine extends StatelessWidget {
+  const _TenantHeaderLine();
+
+  @override
+  Widget build(BuildContext context) {
+    return _TenantInfoBuilder(
+      builder: (context, tenant) {
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            tenant.headerLine,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: Colors.black87,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _TenantCardTitle extends StatelessWidget {
+  const _TenantCardTitle({required this.deviceName});
+
+  final String deviceName;
+
+  @override
+  Widget build(BuildContext context) {
+    return _TenantInfoBuilder(
+      builder: (context, tenant) {
+        return _CardTitle(title: '$deviceName (${tenant.roomBadge})');
+      },
+    );
+  }
+}
+
+class _TenantControlledDeviceCard extends StatelessWidget {
+  const _TenantControlledDeviceCard({
+    required this.deviceName,
+    required this.isOn,
+    required this.status,
+    required this.icon,
+    required this.onChanged,
+    this.height,
+  });
+
+  final String deviceName;
+  final bool isOn;
+  final String status;
+  final IconData icon;
+  final ValueChanged<bool> onChanged;
+  final double? height;
+
+  @override
+  Widget build(BuildContext context) {
+    return _TenantInfoBuilder(
+      builder: (context, tenant) {
+        return _DeviceCard(
+          height: height,
+          title: '$deviceName (${tenant.roomBadge})',
+          isOn: isOn,
+          status: tenant.roomNumber == null ? 'Chưa gán phòng' : status,
+          icon: icon,
+          onChanged: tenant.roomNumber == null ? (_) {} : onChanged,
+        );
+      },
+    );
+  }
+}
+
+class _TenantBillSummary extends StatelessWidget {
+  const _TenantBillSummary();
+
+  @override
+  Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return const _TenantBillFallback();
+
+    return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      future: AppFirestoreService.users.doc(uid).get(),
+      builder: (context, userSnapshot) {
+        final userData = userSnapshot.data?.data();
+        final rawRoomNumber = userData?['roomNumber'];
+        final roomNumber = rawRoomNumber is int
+            ? rawRoomNumber
+            : int.tryParse(rawRoomNumber?.toString() ?? '');
+
+        if (roomNumber == null) return const _TenantBillFallback();
+
+        final billDocId = AppFirestoreService.billId(
+          roomNumber,
+          AppFirestoreService.currentMonthKey(),
+        );
+
+        return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          stream: AppFirestoreService.bills.doc(billDocId).snapshots(),
+          builder: (context, billSnapshot) {
+            final data = billSnapshot.data?.data();
+            final bill = data == null
+                ? BillRecord.sampleForRoom(
+                    roomNumber,
+                    AppFirestoreService.currentMonthKey(),
+                  )
+                : BillRecord.fromFirestore(billDocId, data);
+
+            return Row(
+              children: [
+                const Expanded(
+                  child: _DashboardCard(
+                    height: 58,
+                    child: Center(
+                      child: Text(
+                        'Tiêu thụ điện T5',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: _DashboardCard(
+                    height: 58,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          '${bill.electricKwh.toStringAsFixed(1)} kWh',
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            height: 1,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          'Hóa đơn: ${_formatTenantMoney(bill.totalAmount)}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF1A7F3F),
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _TenantBillFallback extends StatelessWidget {
+  const _TenantBillFallback();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: const [
+        Expanded(
+          child: _DashboardCard(
+            height: 58,
+            child: Center(
+              child: Text(
+                'Tiêu thụ điện T5',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ),
+        ),
+        SizedBox(width: 9),
+        Expanded(
+          child: _DashboardCard(
+            height: 58,
+            child: Center(
+              child: Text(
+                'Chưa gán phòng',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+String _formatTenantMoney(int value) {
+  final text = value.toString();
+  final buffer = StringBuffer();
+  for (var i = 0; i < text.length; i++) {
+    final remaining = text.length - i;
+    buffer.write(text[i]);
+    if (remaining > 1 && remaining % 3 == 1) buffer.write('.');
+  }
+  return '${buffer.toString()} đ';
+}
+
+class _TenantBillDetailScreen extends StatelessWidget {
+  const _TenantBillDetailScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF2F5F8),
+      appBar: AppBar(
+        backgroundColor: _RoomControlScreenState._primaryBlue,
+        foregroundColor: Colors.white,
+        title: const Text('Hóa Đơn Người Thuê'),
+      ),
+      body: _TenantInfoBuilder(
+        builder: (context, tenant) {
+          final roomNumber = tenant.roomNumber;
+          if (roomNumber == null) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(20),
+                child: Text(
+                  'Tài khoản của bạn chưa được gán phòng. Vui lòng liên hệ admin hoặc quản lý.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            );
+          }
+
+          final billDocId = AppFirestoreService.billId(
+            roomNumber,
+            AppFirestoreService.currentMonthKey(),
+          );
+
+          return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+            stream: AppFirestoreService.bills.doc(billDocId).snapshots(),
+            builder: (context, snapshot) {
+              final data = snapshot.data?.data();
+              final bill = data == null
+                  ? BillRecord.sampleForRoom(
+                      roomNumber,
+                      AppFirestoreService.currentMonthKey(),
+                    )
+                  : BillRecord.fromFirestore(billDocId, data);
+
+              return ListView(
+                padding: const EdgeInsets.all(12),
+                children: [
+                  _TenantBillLine(
+                    icon: Icons.meeting_room,
+                    title: tenant.roomName,
+                    subtitle: 'Tháng ${bill.monthKey}',
+                    amount: bill.roomAmount,
+                  ),
+                  _TenantBillLine(
+                    icon: Icons.electric_bolt,
+                    title: 'Tiền điện',
+                    subtitle: '${bill.electricKwh.toStringAsFixed(1)} kWh',
+                    amount: bill.electricAmount,
+                  ),
+                  _TenantBillLine(
+                    icon: Icons.water_drop,
+                    title: 'Tiền nước',
+                    subtitle: '${bill.waterM3.toStringAsFixed(1)} m3',
+                    amount: bill.waterAmount,
+                  ),
+                  const SizedBox(height: 8),
+                  _DashboardCard(
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.receipt_long,
+                          color: _RoomControlScreenState._primaryBlue,
+                        ),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text(
+                            'Tổng thanh toán',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          _formatTenantMoney(bill.totalAmount),
+                          style: const TextStyle(
+                            color: _RoomControlScreenState._primaryBlue,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _TenantDevicesScreen extends StatelessWidget {
+  const _TenantDevicesScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF2F5F8),
+      appBar: AppBar(
+        backgroundColor: _RoomControlScreenState._primaryBlue,
+        foregroundColor: Colors.white,
+        title: const Text('Thiết Bị Người Thuê'),
+      ),
+      body: _TenantInfoBuilder(
+        builder: (context, tenant) {
+          final roomNumber = tenant.roomNumber;
+          if (roomNumber == null) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(20),
+                child: Text(
+                  'Tài khoản của bạn chưa được gán phòng nên chưa có thiết bị để điều khiển.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            );
+          }
+
+          return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: AppFirestoreService.devices
+                .where('roomNumber', isEqualTo: roomNumber)
+                .snapshots(),
+            builder: (context, snapshot) {
+              final devices = snapshot.data?.docs ??
+                  const <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+
+              return ListView(
+                padding: const EdgeInsets.all(12),
+                children: [
+                  _DashboardCard(
+                    child: Text(
+                      tenant.roomName,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  if (devices.isEmpty) ...[
+                    const _TenantDeviceInfoTile(
+                      icon: Icons.lightbulb,
+                      title: 'Đèn Chính',
+                      subtitle: 'Thiết bị đang dùng dữ liệu điều khiển tại trang chủ',
+                    ),
+                    const _TenantDeviceInfoTile(
+                      icon: Icons.air,
+                      title: 'Quạt Trần',
+                      subtitle: 'Thiết bị đang dùng dữ liệu điều khiển tại trang chủ',
+                    ),
+                    const _TenantDeviceInfoTile(
+                      icon: Icons.ac_unit,
+                      title: 'Máy Lạnh',
+                      subtitle: 'Thiết bị đang dùng dữ liệu điều khiển tại trang chủ',
+                    ),
+                  ] else
+                    ...devices.map((doc) {
+                      final data = doc.data();
+                      final name = (data['name'] ?? 'Thiết bị').toString();
+                      final status = (data['status'] ?? 'offline').toString();
+                      return _TenantDeviceInfoTile(
+                        icon: Icons.devices,
+                        title: name,
+                        subtitle: status == 'online' ? 'Online' : 'Offline',
+                      );
+                    }),
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _TenantDeviceInfoTile extends StatelessWidget {
+  const _TenantDeviceInfoTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: _DashboardCard(
+        child: Row(
+          children: [
+            CircleAvatar(
+              backgroundColor:
+                  _RoomControlScreenState._primaryBlue.withValues(alpha: 0.12),
+              child: Icon(icon, color: _RoomControlScreenState._primaryBlue),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TenantBillLine extends StatelessWidget {
+  const _TenantBillLine({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.amount,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final int amount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: _DashboardCard(
+        child: Row(
+          children: [
+            CircleAvatar(
+              backgroundColor:
+                  _RoomControlScreenState._primaryBlue.withValues(alpha: 0.12),
+              child: Icon(icon, color: _RoomControlScreenState._primaryBlue),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                ],
+              ),
+            ),
+            Text(
+              _formatTenantMoney(amount),
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TenantSettingsScreen extends StatelessWidget {
+  const _TenantSettingsScreen({
+    required this.onLogout,
+  });
+
+  final Future<void> Function() onLogout;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF2F5F8),
+      appBar: AppBar(
+        backgroundColor: _RoomControlScreenState._primaryBlue,
+        foregroundColor: Colors.white,
+        title: const Text('Cài Đặt Người Thuê'),
+      ),
+      body: _TenantInfoBuilder(
+        builder: (context, tenant) {
+          return ListView(
+            padding: const EdgeInsets.all(12),
+            children: [
+              _TenantSettingTile(
+                icon: Icons.person,
+                title: 'Họ tên',
+                value: tenant.name,
+              ),
+              _TenantSettingTile(
+                icon: Icons.email,
+                title: 'Email',
+                value: tenant.email.isEmpty ? 'Chưa có email' : tenant.email,
+              ),
+              _TenantSettingTile(
+                icon: Icons.meeting_room,
+                title: 'Phòng đang thuê',
+                value: tenant.roomName,
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 46,
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    await onLogout();
+                  },
+                  icon: const Icon(Icons.logout),
+                  label: const Text('Đăng xuất'),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _TenantSettingTile extends StatelessWidget {
+  const _TenantSettingTile({
+    required this.icon,
+    required this.title,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String title;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: _DashboardCard(
+        child: Row(
+          children: [
+            Icon(icon, color: _RoomControlScreenState._primaryBlue),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -785,19 +1461,81 @@ class _ActivityList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: const [
-        Text(
-          'Hoạt Động Gần Đây',
-          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
-        ),
-        SizedBox(height: 12),
-        _ActivityItem(text: 'Yêu cầu sửa đèn: Đã gửi', time: '10:05'),
-        _ActivityItem(text: 'Thông báo: Cúp điện (02/06)', time: '10:20'),
-        _ActivityItem(text: 'Cài đặt tự động: Đã bật', time: '10:35'),
-      ],
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: AppFirestoreService.notifications
+          .where('targetRoles', arrayContains: 'user')
+          .snapshots(),
+      builder: (context, snapshot) {
+        final items = (snapshot.data?.docs ??
+                const <QueryDocumentSnapshot<Map<String, dynamic>>>[])
+            .map((doc) => _TenantActivity.fromFirestore(doc.data()))
+            .toList()
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        final visibleItems = items.take(3).toList();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Hoạt Động Gần Đây',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 12),
+            if (visibleItems.isEmpty)
+              const _ActivityItem(
+                text: 'Chưa có thông báo mới',
+                time: '--:--',
+              )
+            else
+              ...visibleItems.map(
+                (item) => _ActivityItem(
+                  text: item.title,
+                  time: item.timeLabel,
+                ),
+              ),
+          ],
+        );
+      },
     );
+  }
+}
+
+class _TenantActivity {
+  const _TenantActivity({
+    required this.message,
+    required this.senderRole,
+    required this.createdAt,
+  });
+
+  final String message;
+  final String senderRole;
+  final DateTime createdAt;
+
+  factory _TenantActivity.fromFirestore(Map<String, dynamic> data) {
+    final timestamp = data['createdAt'];
+    return _TenantActivity(
+      message: (data['message'] ?? '').toString(),
+      senderRole: (data['senderRole'] ?? '').toString(),
+      createdAt: timestamp is Timestamp
+          ? timestamp.toDate()
+          : DateTime.fromMillisecondsSinceEpoch(0),
+    );
+  }
+
+  String get title {
+    final prefix = senderRole == 'manager'
+        ? 'Quản lý'
+        : senderRole == 'admin'
+            ? 'Admin'
+            : 'Thông báo';
+    return '$prefix: $message';
+  }
+
+  String get timeLabel {
+    if (createdAt.millisecondsSinceEpoch == 0) return 'Mới';
+    final hour = createdAt.hour.toString().padLeft(2, '0');
+    final minute = createdAt.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
   }
 }
 
@@ -840,3 +1578,4 @@ class _ActivityItem extends StatelessWidget {
     );
   }
 }
+
