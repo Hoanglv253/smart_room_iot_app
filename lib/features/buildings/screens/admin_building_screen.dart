@@ -3,11 +3,18 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/services/app_firestore_service.dart';
+import 'admin_room_management_screen.dart';
 
 class AdminBuildingScreen extends StatelessWidget {
-  const AdminBuildingScreen({required this.user, super.key});
+  const AdminBuildingScreen({
+    required this.user,
+    required this.onOpenUserManagement,
+    super.key,
+  });
 
   final User user;
+  final void Function(String buildingId, String buildingName)
+      onOpenUserManagement;
 
   @override
   Widget build(BuildContext context) {
@@ -46,9 +53,13 @@ class AdminBuildingScreen extends StatelessWidget {
             const SizedBox(height: 16),
             _BuildingStats(buildingId: buildingId, building: building),
             const SizedBox(height: 16),
-            const _AdminActionGrid(),
+            _AdminActionGrid(
+              buildingId: buildingId,
+              building: building,
+              onOpenUserManagement: onOpenUserManagement,
+            ),
             const SizedBox(height: 16),
-            _JoinRequestBoard(buildingId: buildingId),
+            _JoinRequestBoard(buildingId: buildingId, adminId: user.uid),
           ],
         );
       },
@@ -232,13 +243,22 @@ class _RoomPiePainter extends CustomPainter {
 }
 
 class _AdminActionGrid extends StatelessWidget {
-  const _AdminActionGrid();
+  const _AdminActionGrid({
+    required this.buildingId,
+    required this.building,
+    required this.onOpenUserManagement,
+  });
+
+  final String buildingId;
+  final Map<String, dynamic> building;
+  final void Function(String buildingId, String buildingName)
+      onOpenUserManagement;
 
   static const _actions = [
-    (Icons.apartment_outlined, 'Quản lý tòa nhà'),
-    (Icons.people_outline, 'Quản lý người dùng'),
-    (Icons.receipt_long_outlined, 'Hóa đơn'),
-    (Icons.emergency_outlined, 'Khẩn cấp'),
+    _AdminAction('building', Icons.apartment_outlined, 'Quản lý tòa nhà'),
+    _AdminAction('users', Icons.people_outline, 'Quản lý người dùng'),
+    _AdminAction('bills', Icons.receipt_long_outlined, 'Hóa đơn'),
+    _AdminAction('emergency', Icons.emergency_outlined, 'Khẩn cấp'),
   ];
 
   @override
@@ -254,13 +274,13 @@ class _AdminActionGrid extends StatelessWidget {
         return Card(
           elevation: 1,
           child: InkWell(
-            onTap: () {},
+            onTap: () => _handleActionTap(context, action.id),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(action.$1, color: Colors.blueAccent),
+                Icon(action.icon, color: Colors.blueAccent),
                 const SizedBox(height: 8),
-                Text(action.$2, textAlign: TextAlign.center),
+                Text(action.label, textAlign: TextAlign.center),
               ],
             ),
           ),
@@ -268,12 +288,45 @@ class _AdminActionGrid extends StatelessWidget {
       }).toList(),
     );
   }
+
+  void _handleActionTap(BuildContext context, String actionId) {
+    if (actionId == 'building') {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => AdminRoomManagementScreen(
+            buildingId: buildingId,
+            building: building,
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (actionId == 'users') {
+      onOpenUserManagement(
+        buildingId,
+        (building['name'] ?? 'toa nha').toString(),
+      );
+    }
+  }
+}
+
+class _AdminAction {
+  const _AdminAction(this.id, this.icon, this.label);
+
+  final String id;
+  final IconData icon;
+  final String label;
 }
 
 class _JoinRequestBoard extends StatelessWidget {
-  const _JoinRequestBoard({required this.buildingId});
+  const _JoinRequestBoard({
+    required this.buildingId,
+    required this.adminId,
+  });
 
   final String buildingId;
+  final String adminId;
 
   @override
   Widget build(BuildContext context) {
@@ -319,7 +372,7 @@ class _JoinRequestBoard extends StatelessWidget {
                           IconButton(
                             tooltip: 'Duyệt',
                             icon: const Icon(Icons.check, color: Colors.green),
-                            onPressed: () => _approve(doc.id, data),
+                            onPressed: () => _approve(context, doc.id, data),
                           ),
                           IconButton(
                             tooltip: 'Từ chối',
@@ -339,22 +392,57 @@ class _JoinRequestBoard extends StatelessWidget {
     );
   }
 
-  Future<void> _approve(String requestId, Map<String, dynamic> data) async {
+  Future<void> _approve(
+    BuildContext context,
+    String requestId,
+    Map<String, dynamic> data,
+  ) async {
     final requesterId = (data['requesterId'] ?? '').toString();
     if (requesterId.isEmpty) return;
 
-    await AppFirestoreService.db.runTransaction((transaction) async {
-      transaction.update(AppFirestoreService.joinRequests.doc(requestId), {
-        'status': JoinRequestStatus.approved,
-        'updatedAt': FieldValue.serverTimestamp(),
+    try {
+      await AppFirestoreService.db.runTransaction((transaction) async {
+        transaction.update(AppFirestoreService.joinRequests.doc(requestId), {
+          'status': JoinRequestStatus.approved,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        transaction.update(AppFirestoreService.users.doc(requesterId), {
+          'buildingId': buildingId,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
       });
-      transaction.update(AppFirestoreService.users.doc(requesterId), {
-        'buildingId': buildingId,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    });
+    } on FirebaseException catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.code == 'permission-denied'
+                ? 'Firestore chua cap quyen duyet yeu cau tham gia.'
+                : e.message ?? 'Khong duyet duoc yeu cau.',
+          ),
+        ),
+      );
+      return;
+    }
 
-    await _ensureGroupChatMember(requesterId);
+    try {
+      await _ensureGroupChatMember(requesterId, data);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Da duyet yeu cau tham gia.')),
+      );
+    } on FirebaseException catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.code == 'permission-denied'
+                ? 'Da duyet, nhung Firestore chua cap quyen them vao nhom chat.'
+                : e.message ?? 'Da duyet, nhung chua them duoc vao nhom chat.',
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _reject(String requestId) {
@@ -364,16 +452,34 @@ class _JoinRequestBoard extends StatelessWidget {
     });
   }
 
-  Future<void> _ensureGroupChatMember(String requesterId) async {
+  Future<void> _ensureGroupChatMember(
+    String requesterId,
+    Map<String, dynamic> data,
+  ) async {
     final query = await AppFirestoreService.chats
-        .where('type', isEqualTo: ChatType.group)
-        .where('buildingId', isEqualTo: buildingId)
-        .limit(1)
+        .where('memberIds', arrayContains: adminId)
         .get();
 
-    if (query.docs.isEmpty) return;
+    final matchedChats = query.docs.where((doc) {
+      final chat = doc.data();
+      return chat['type'] == ChatType.group && chat['buildingId'] == buildingId;
+    }).toList();
 
-    await query.docs.first.reference.update({
+    if (matchedChats.isEmpty) {
+      await AppFirestoreService.chats.add({
+        'type': ChatType.group,
+        'buildingId': buildingId,
+        'ownerId': adminId,
+        'title': (data['buildingName'] ?? 'Nhom chat toa nha').toString(),
+        'memberIds': [adminId, requesterId],
+        'lastMessage': '',
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      return;
+    }
+
+    await matchedChats.first.reference.update({
       'memberIds': FieldValue.arrayUnion([requesterId]),
       'updatedAt': FieldValue.serverTimestamp(),
     });

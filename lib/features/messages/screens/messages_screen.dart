@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/services/app_firestore_service.dart';
+import 'chat_detail_screen.dart';
 
 class MessagesScreen extends StatelessWidget {
   const MessagesScreen({required this.user, super.key});
@@ -16,6 +17,18 @@ class MessagesScreen extends StatelessWidget {
           .where('memberIds', arrayContains: user.uid)
           .snapshots(),
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Text(
+                'Khong tai duoc danh sach chat. Kiem tra Firestore Rules cho collection chats.',
+                textAlign: TextAlign.center,
+              ),
+            ),
+          );
+        }
+
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -26,7 +39,7 @@ class MessagesScreen extends StatelessWidget {
             child: Padding(
               padding: EdgeInsets.all(24),
               child: Text(
-                'Chưa có cuộc trò chuyện. Khi bạn nhắn với admin hoặc được duyệt vào tòa nhà, chat sẽ xuất hiện ở đây.',
+                'Chua co cuoc tro chuyen. Khi ban nhan voi admin hoac duoc duyet vao toa nha, chat se xuat hien o day.',
                 textAlign: TextAlign.center,
               ),
             ),
@@ -38,8 +51,12 @@ class MessagesScreen extends StatelessWidget {
           itemCount: chats.length,
           separatorBuilder: (_, __) => const SizedBox(height: 8),
           itemBuilder: (context, index) {
-            final data = chats[index].data();
+            final doc = chats[index];
+            final data = doc.data();
             final isGroup = data['type'] == ChatType.group;
+            final title = (data['title'] ?? 'Tin nhan').toString();
+            final lastMessage = (data['lastMessage'] ?? '').toString();
+
             return Card(
               elevation: 1,
               child: ListTile(
@@ -47,13 +64,25 @@ class MessagesScreen extends StatelessWidget {
                   isGroup ? Icons.groups_outlined : Icons.person_outline,
                   color: Colors.blueAccent,
                 ),
-                title: Text((data['title'] ?? 'Tin nhắn').toString()),
+                title: Text(title),
                 subtitle: Text(
-                  (data['lastMessage'] ?? '').toString().isEmpty
-                      ? (isGroup ? 'Nhóm chat tòa nhà' : 'Chat riêng')
-                      : data['lastMessage'].toString(),
+                  lastMessage.isEmpty
+                      ? (isGroup ? 'Nhom chat toa nha' : 'Chat rieng')
+                      : lastMessage,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                onTap: () {},
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ChatDetailScreen(
+                        chatId: doc.id,
+                        chatTitle: title,
+                        user: user,
+                      ),
+                    ),
+                  );
+                },
               ),
             );
           },

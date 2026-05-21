@@ -16,13 +16,43 @@ class AdminSettingsScreen extends StatefulWidget {
 class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   final _nameController = TextEditingController();
   final _addressController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _floorCountController = TextEditingController();
+  final _roomsPerFloorController = TextEditingController();
   final _totalRoomsController = TextEditingController();
   final _defaultRentController = TextEditingController();
+  final _electricityPriceController = TextEditingController();
+  final _waterPriceController = TextEditingController();
+  final _serviceFeeController = TextEditingController();
+  final _internetFeeController = TextEditingController();
+  final _parkingFeeController = TextEditingController();
+  final _billCloseDayController = TextEditingController();
+  final _billDueDayController = TextEditingController();
+  final _rulesController = TextEditingController();
 
   String? _buildingId;
   String? _loadError;
   bool _isLoading = true;
   bool _isSaving = false;
+
+  bool _wifi = true;
+  bool _elevator = false;
+  bool _camera = true;
+  bool _parking = true;
+  bool _laundry = false;
+  bool _security = false;
+
+  bool _isPublic = true;
+  bool _allowPreJoinMessage = true;
+  bool _allowTenantJoinRequest = true;
+  bool _allowManagerApplication = true;
+  bool _requireApproval = true;
+  bool _autoJoinGroupChat = true;
+  bool _showAddress = true;
+  bool _showRoomPrice = true;
+  bool _showAvailableRooms = true;
 
   @override
   void initState() {
@@ -34,9 +64,31 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   void dispose() {
     _nameController.dispose();
     _addressController.dispose();
+    _descriptionController.dispose();
+    _phoneController.dispose();
+    _emailController.dispose();
+    _floorCountController.dispose();
+    _roomsPerFloorController.dispose();
     _totalRoomsController.dispose();
     _defaultRentController.dispose();
+    _electricityPriceController.dispose();
+    _waterPriceController.dispose();
+    _serviceFeeController.dispose();
+    _internetFeeController.dispose();
+    _parkingFeeController.dispose();
+    _billCloseDayController.dispose();
+    _billDueDayController.dispose();
+    _rulesController.dispose();
     super.dispose();
+  }
+
+  int get _effectiveTotalRooms {
+    final floorCount = _readInt(_floorCountController);
+    final roomsPerFloor = _readInt(_roomsPerFloorController);
+    if (floorCount > 0 && roomsPerFloor > 0) {
+      return floorCount * roomsPerFloor;
+    }
+    return _readInt(_totalRoomsController);
   }
 
   Future<void> _loadBuilding() async {
@@ -54,11 +106,69 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       if (query.docs.isNotEmpty) {
         final doc = query.docs.first;
         final data = doc.data();
+        final amenities = _readMap(data['amenities']);
+        final joinSettings = _readMap(data['joinSettings']);
+        final displaySettings = _readMap(data['displaySettings']);
+
         _buildingId = doc.id;
-        _nameController.text = (data['name'] ?? '').toString();
-        _addressController.text = (data['address'] ?? '').toString();
-        _totalRoomsController.text = (data['totalRooms'] ?? '').toString();
-        _defaultRentController.text = (data['defaultRent'] ?? '').toString();
+        _setText(_nameController, data['name']);
+        _setText(_addressController, data['address']);
+        _setText(_descriptionController, data['description']);
+        _setText(_phoneController, data['phone']);
+        _setText(_emailController, data['email']);
+        _setText(_floorCountController, data['floorCount']);
+        _setText(_roomsPerFloorController, data['roomsPerFloor']);
+        _setText(_totalRoomsController, data['totalRooms']);
+        _setText(_defaultRentController, data['defaultRent']);
+        _setText(_electricityPriceController, data['electricityPrice']);
+        _setText(_waterPriceController, data['waterPrice']);
+        _setText(_serviceFeeController, data['serviceFee']);
+        _setText(_internetFeeController, data['internetFee']);
+        _setText(_parkingFeeController, data['parkingFee']);
+        _setText(_billCloseDayController, data['billCloseDay']);
+        _setText(_billDueDayController, data['billDueDay']);
+        _setText(_rulesController, data['rulesText']);
+
+        _wifi = _readBool(amenities['wifi'], fallback: _wifi);
+        _elevator = _readBool(amenities['elevator'], fallback: _elevator);
+        _camera = _readBool(amenities['camera'], fallback: _camera);
+        _parking = _readBool(amenities['parking'], fallback: _parking);
+        _laundry = _readBool(amenities['laundry'], fallback: _laundry);
+        _security = _readBool(amenities['security'], fallback: _security);
+
+        _isPublic = _readBool(data['isPublic'], fallback: _isPublic);
+        _allowPreJoinMessage = _readBool(
+          joinSettings['allowPreJoinMessage'],
+          fallback: _allowPreJoinMessage,
+        );
+        _allowTenantJoinRequest = _readBool(
+          joinSettings['allowTenantJoinRequest'],
+          fallback: _allowTenantJoinRequest,
+        );
+        _allowManagerApplication = _readBool(
+          joinSettings['allowManagerApplication'],
+          fallback: _allowManagerApplication,
+        );
+        _requireApproval = _readBool(
+          joinSettings['requireApproval'],
+          fallback: _requireApproval,
+        );
+        _autoJoinGroupChat = _readBool(
+          joinSettings['autoJoinGroupChat'],
+          fallback: _autoJoinGroupChat,
+        );
+        _showAddress = _readBool(
+          displaySettings['showAddress'],
+          fallback: _showAddress,
+        );
+        _showRoomPrice = _readBool(
+          displaySettings['showRoomPrice'],
+          fallback: _showRoomPrice,
+        );
+        _showAvailableRooms = _readBool(
+          displaySettings['showAvailableRooms'],
+          fallback: _showAvailableRooms,
+        );
       }
     } on FirebaseException catch (e) {
       _loadError = e.code == 'permission-denied'
@@ -72,10 +182,27 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   }
 
   Future<void> _saveBuilding() async {
+    final buildingName = _nameController.text.trim();
+    final floorCount = _readInt(_floorCountController);
+    final roomsPerFloor = _readInt(_roomsPerFloorController);
+    final totalRooms = _effectiveTotalRooms;
+    final defaultRent = _readInt(_defaultRentController);
+
+    if (buildingName.isEmpty) {
+      _showSnack('Hay nhap ten toa nha.');
+      return;
+    }
+
+    if (floorCount <= 0 || totalRooms <= 0) {
+      _showSnack('Hay nhap so tang va tong so phong hop le.');
+      return;
+    }
+
     setState(() => _isSaving = true);
 
     try {
-      final doc = _buildingId == null
+      final isNewBuilding = _buildingId == null;
+      final doc = isNewBuilding
           ? AppFirestoreService.buildings.doc()
           : AppFirestoreService.buildings.doc(_buildingId);
 
@@ -83,47 +210,160 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         'id': doc.id,
         'adminId': widget.user.uid,
         'adminName': widget.user.displayName ?? widget.user.email ?? 'Admin',
-        'name': _nameController.text.trim(),
+        'name': buildingName,
         'address': _addressController.text.trim(),
-        'totalRooms': int.tryParse(_totalRoomsController.text.trim()) ?? 0,
-        'defaultRent': int.tryParse(_defaultRentController.text.trim()) ?? 0,
-        'createdAt': FieldValue.serverTimestamp(),
+        'description': _descriptionController.text.trim(),
+        'phone': _phoneController.text.trim(),
+        'email': _emailController.text.trim(),
+        'floorCount': floorCount,
+        'roomsPerFloor': roomsPerFloor,
+        'totalRooms': totalRooms,
+        'defaultRent': defaultRent,
+        'electricityPrice': _readInt(_electricityPriceController),
+        'waterPrice': _readInt(_waterPriceController),
+        'serviceFee': _readInt(_serviceFeeController),
+        'internetFee': _readInt(_internetFeeController),
+        'parkingFee': _readInt(_parkingFeeController),
+        'billCloseDay': _readInt(_billCloseDayController),
+        'billDueDay': _readInt(_billDueDayController),
+        'rulesText': _rulesController.text.trim(),
+        'amenities': {
+          'wifi': _wifi,
+          'elevator': _elevator,
+          'camera': _camera,
+          'parking': _parking,
+          'laundry': _laundry,
+          'security': _security,
+        },
+        'isPublic': _isPublic,
+        'joinSettings': {
+          'allowPreJoinMessage': _allowPreJoinMessage,
+          'allowTenantJoinRequest': _allowTenantJoinRequest,
+          'allowManagerApplication': _allowManagerApplication,
+          'requireApproval': _requireApproval,
+          'autoJoinGroupChat': _autoJoinGroupChat,
+        },
+        'displaySettings': {
+          'showAddress': _showAddress,
+          'showRoomPrice': _showRoomPrice,
+          'showAvailableRooms': _showAvailableRooms,
+        },
+        if (isNewBuilding) 'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
       _buildingId = doc.id;
-      await _ensureBuildingGroupChat(doc.id);
+      _totalRoomsController.text = totalRooms.toString();
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Da luu thiet lap toa nha.')),
+      try {
+        await _syncRooms(
+          buildingId: doc.id,
+          totalRooms: totalRooms,
+          floorCount: floorCount,
+          roomsPerFloor: roomsPerFloor,
+          defaultRent: defaultRent,
         );
+      } on FirebaseException catch (e) {
+        _showSnack(
+          e.code == 'permission-denied'
+              ? 'Da luu toa nha, nhung Firestore chua cap quyen ghi buildings/{id}/rooms.'
+              : e.message ?? 'Da luu toa nha, nhung chua dong bo duoc phong.',
+        );
+        return;
       }
+
+      if (_autoJoinGroupChat) {
+        try {
+          await _ensureBuildingGroupChat(doc.id);
+        } on FirebaseException catch (e) {
+          _showSnack(
+            e.code == 'permission-denied'
+                ? 'Da luu toa nha va phong, nhung Firestore chua cap quyen ghi chats.'
+                : e.message ?? 'Da luu toa nha va phong, nhung chua tao duoc chat.',
+          );
+          return;
+        }
+      }
+
+      _showSnack('Da luu thiet lap va dong bo danh sach phong.');
     } on FirebaseException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              e.code == 'permission-denied'
-                  ? 'Firestore chua cap quyen ghi buildings/chats.'
-                  : e.message ?? 'Khong luu duoc toa nha.',
-            ),
-          ),
-        );
-      }
+      _showSnack(
+        e.code == 'permission-denied'
+            ? 'Firestore chua cap quyen ghi buildings/rooms/chats.'
+            : e.message ?? 'Khong luu duoc toa nha.',
+      );
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
   }
 
+  Future<void> _syncRooms({
+    required String buildingId,
+    required int totalRooms,
+    required int floorCount,
+    required int roomsPerFloor,
+    required int defaultRent,
+  }) async {
+    if (totalRooms <= 0) return;
+
+    final rooms = AppFirestoreService.buildingRooms(buildingId);
+    final effectiveRoomsPerFloor = roomsPerFloor > 0
+        ? roomsPerFloor
+        : (floorCount > 0 ? (totalRooms / floorCount).ceil() : totalRooms);
+
+    var batch = FirebaseFirestore.instance.batch();
+    var operationCount = 0;
+
+    Future<void> commitBatch() async {
+      if (operationCount == 0) return;
+      await batch.commit();
+      batch = FirebaseFirestore.instance.batch();
+      operationCount = 0;
+    }
+
+    for (var index = 1; index <= totalRooms; index++) {
+      final floor = effectiveRoomsPerFloor > 0
+          ? ((index - 1) ~/ effectiveRoomsPerFloor) + 1
+          : 1;
+      final roomInFloor = effectiveRoomsPerFloor > 0
+          ? ((index - 1) % effectiveRoomsPerFloor) + 1
+          : index;
+      final paddedIndex = index.toString().padLeft(3, '0');
+      final roomRef = rooms.doc('room_$paddedIndex');
+
+      batch.set(roomRef, {
+        'id': roomRef.id,
+        'buildingId': buildingId,
+        'roomNumber': index,
+        'floor': floor,
+        'name': 'Phong $floor${roomInFloor.toString().padLeft(2, '0')}',
+        'rent': defaultRent,
+        'type': 'standard',
+        'maxPeople': 0,
+        'area': 0,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      operationCount++;
+      if (operationCount >= 450) {
+        await commitBatch();
+      }
+    }
+
+    await commitBatch();
+  }
+
   Future<void> _ensureBuildingGroupChat(String buildingId) async {
     final query = await AppFirestoreService.chats
-        .where('type', isEqualTo: ChatType.group)
-        .where('buildingId', isEqualTo: buildingId)
-        .limit(1)
+        .where('memberIds', arrayContains: widget.user.uid)
         .get();
 
-    if (query.docs.isNotEmpty) return;
+    final matchedChats = query.docs.where((doc) {
+      final chat = doc.data();
+      return chat['type'] == ChatType.group && chat['buildingId'] == buildingId;
+    }).toList();
+
+    if (matchedChats.isNotEmpty) return;
 
     await AppFirestoreService.chats.add({
       'type': ChatType.group,
@@ -139,6 +379,35 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     });
   }
 
+  void _showSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  void _setText(TextEditingController controller, Object? value) {
+    controller.text = value?.toString() ?? '';
+  }
+
+  int _readInt(TextEditingController controller) {
+    final raw = controller.text.trim().replaceAll('.', '').replaceAll(',', '');
+    return int.tryParse(raw) ?? 0;
+  }
+
+  bool _readBool(Object? value, {required bool fallback}) {
+    if (value is bool) return value;
+    return fallback;
+  }
+
+  Map<String, dynamic> _readMap(Object? value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) {
+      return value.map((key, dynamic value) => MapEntry(key.toString(), value));
+    }
+    return {};
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) return const Center(child: CircularProgressIndicator());
@@ -151,52 +420,292 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       padding: const EdgeInsets.all(16),
       children: [
         Text(
-          'Thiết lập toà nhà',
-          style: Theme.of(
-            context,
-          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+          'Thiet lap toa nha',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Du lieu o day se duoc dung cho phong, hoa don, tim kiem va phe duyet sau nay.',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Colors.black54,
+              ),
         ),
         const SizedBox(height: 16),
-        TextField(
-          controller: _nameController,
-          decoration: const InputDecoration(
-            labelText: 'Tên toà nhà',
-            border: OutlineInputBorder(),
-          ),
+        _SettingsSection(
+          title: 'Thong tin chung',
+          children: [
+            _buildTextField(_nameController, 'Ten toa nha'),
+            _buildTextField(_addressController, 'Dia chi toa nha'),
+            _buildTextField(
+              _descriptionController,
+              'Mo ta ngan',
+              maxLines: 3,
+            ),
+            _buildTextField(
+              _phoneController,
+              'So dien thoai lien he',
+              keyboardType: TextInputType.phone,
+            ),
+            _buildTextField(
+              _emailController,
+              'Email lien he',
+              keyboardType: TextInputType.emailAddress,
+            ),
+          ],
         ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _addressController,
-          decoration: const InputDecoration(
-            labelText: 'Địa chỉ toà nhà',
-            border: OutlineInputBorder(),
-          ),
+        _SettingsSection(
+          title: 'So do phong',
+          children: [
+            _buildTextField(
+              _floorCountController,
+              'So tang',
+              keyboardType: TextInputType.number,
+              onChanged: (_) => setState(() {}),
+            ),
+            _buildTextField(
+              _roomsPerFloorController,
+              'So phong moi tang',
+              keyboardType: TextInputType.number,
+              helperText: 'Nhap muc nay de app tu tinh tong so phong.',
+              onChanged: (_) => setState(() {}),
+            ),
+            _buildTextField(
+              _totalRoomsController,
+              'Tong so phong',
+              keyboardType: TextInputType.number,
+              helperText:
+                  'Hien tai se dong bo $_effectiveTotalRooms phong khi bam luu.',
+              onChanged: (_) => setState(() {}),
+            ),
+            _buildTextField(
+              _defaultRentController,
+              'Tien thue mac dinh cho phong',
+              keyboardType: TextInputType.number,
+            ),
+          ],
         ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _totalRoomsController,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            labelText: 'Tổng số phòng',
-            border: OutlineInputBorder(),
-          ),
+        _SettingsSection(
+          title: 'Gia dich vu va hoa don',
+          children: [
+            _buildTextField(
+              _electricityPriceController,
+              'Gia dien',
+              keyboardType: TextInputType.number,
+            ),
+            _buildTextField(
+              _waterPriceController,
+              'Gia nuoc',
+              keyboardType: TextInputType.number,
+            ),
+            _buildTextField(
+              _serviceFeeController,
+              'Phi dich vu',
+              keyboardType: TextInputType.number,
+            ),
+            _buildTextField(
+              _internetFeeController,
+              'Phi internet',
+              keyboardType: TextInputType.number,
+            ),
+            _buildTextField(
+              _parkingFeeController,
+              'Phi gui xe',
+              keyboardType: TextInputType.number,
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildTextField(
+                    _billCloseDayController,
+                    'Ngay chot so',
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildTextField(
+                    _billDueDayController,
+                    'Han dong tien',
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _defaultRentController,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            labelText: 'Tiền thuê mặc định',
-            border: OutlineInputBorder(),
-          ),
+        _SettingsSection(
+          title: 'Tien ich',
+          children: [
+            _buildSwitch('Wifi', _wifi, (value) => setState(() => _wifi = value)),
+            _buildSwitch(
+              'Thang may',
+              _elevator,
+              (value) => setState(() => _elevator = value),
+            ),
+            _buildSwitch(
+              'Camera',
+              _camera,
+              (value) => setState(() => _camera = value),
+            ),
+            _buildSwitch(
+              'Cho de xe',
+              _parking,
+              (value) => setState(() => _parking = value),
+            ),
+            _buildSwitch(
+              'May giat',
+              _laundry,
+              (value) => setState(() => _laundry = value),
+            ),
+            _buildSwitch(
+              'Bao ve',
+              _security,
+              (value) => setState(() => _security = value),
+            ),
+          ],
         ),
-        const SizedBox(height: 18),
+        _SettingsSection(
+          title: 'Tham gia va hien thi',
+          children: [
+            _buildSwitch(
+              'Cong khai toa nha',
+              _isPublic,
+              (value) => setState(() => _isPublic = value),
+            ),
+            _buildSwitch(
+              'Cho nhan tin truoc khi tham gia',
+              _allowPreJoinMessage,
+              (value) => setState(() => _allowPreJoinMessage = value),
+            ),
+            _buildSwitch(
+              'Cho nguoi thue xin vao toa nha',
+              _allowTenantJoinRequest,
+              (value) => setState(() => _allowTenantJoinRequest = value),
+            ),
+            _buildSwitch(
+              'Cho quan ly ung tuyen',
+              _allowManagerApplication,
+              (value) => setState(() => _allowManagerApplication = value),
+            ),
+            _buildSwitch(
+              'Can admin phe duyet',
+              _requireApproval,
+              (value) => setState(() => _requireApproval = value),
+            ),
+            _buildSwitch(
+              'Tu dong vao nhom chat toa nha',
+              _autoJoinGroupChat,
+              (value) => setState(() => _autoJoinGroupChat = value),
+            ),
+            _buildSwitch(
+              'Hien dia chi',
+              _showAddress,
+              (value) => setState(() => _showAddress = value),
+            ),
+            _buildSwitch(
+              'Hien gia phong',
+              _showRoomPrice,
+              (value) => setState(() => _showRoomPrice = value),
+            ),
+            _buildSwitch(
+              'Hien so phong trong',
+              _showAvailableRooms,
+              (value) => setState(() => _showAvailableRooms = value),
+            ),
+          ],
+        ),
+        _SettingsSection(
+          title: 'Noi quy',
+          children: [
+            _buildTextField(
+              _rulesController,
+              'Noi quy toa nha',
+              maxLines: 5,
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
         FilledButton.icon(
           onPressed: _isSaving ? null : _saveBuilding,
-          icon: const Icon(Icons.save_outlined),
-          label: const Text('Lưu thiết lập'),
+          icon: _isSaving
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.save_outlined),
+          label: const Text('Luu thiet lap'),
         ),
       ],
+    );
+  }
+
+  Widget _buildTextField(
+    TextEditingController controller,
+    String label, {
+    TextInputType? keyboardType,
+    int maxLines = 1,
+    String? helperText,
+    ValueChanged<String>? onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextField(
+        controller: controller,
+        keyboardType: keyboardType,
+        maxLines: maxLines,
+        onChanged: onChanged,
+        decoration: InputDecoration(
+          labelText: label,
+          helperText: helperText,
+          border: const OutlineInputBorder(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSwitch(
+    String title,
+    bool value,
+    ValueChanged<bool> onChanged,
+  ) {
+    return SwitchListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text(title),
+      value: value,
+      onChanged: onChanged,
+    );
+  }
+}
+
+class _SettingsSection extends StatelessWidget {
+  const _SettingsSection({required this.title, required this.children});
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 12),
+            ...children,
+          ],
+        ),
+      ),
     );
   }
 }

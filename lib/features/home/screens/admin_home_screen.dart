@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/services/app_firestore_service.dart';
 import '../../buildings/screens/admin_building_screen.dart';
+import '../../buildings/screens/admin_user_management_screen.dart';
 import '../../feed/screens/feed_screen.dart';
 import '../../messages/screens/messages_screen.dart';
 import '../../settings/screens/admin_settings_screen.dart';
@@ -36,7 +37,10 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   Widget build(BuildContext context) {
     final pages = [
       FeedScreen(user: widget.user, role: UserRole.admin),
-      AdminBuildingScreen(user: widget.user),
+      AdminBuildingScreen(
+        user: widget.user,
+        onOpenUserManagement: _openUserManagement,
+      ),
       MessagesScreen(user: widget.user),
       AdminSettingsScreen(user: widget.user),
     ];
@@ -78,6 +82,17 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
               ),
             )
             .toList(),
+      ),
+    );
+  }
+
+  void _openUserManagement(String buildingId, String buildingName) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AdminUserManagementScreen(
+          buildingId: buildingId,
+          buildingName: buildingName,
+        ),
       ),
     );
   }
