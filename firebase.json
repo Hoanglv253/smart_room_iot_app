@@ -1,1 +1,28 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"smart-room-iot-353c5","appId":"1:537792897840:android:f68f18dc17329f2ade1ef5","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"smart-room-iot-353c5","configurations":{"android":"1:537792897840:android:f68f18dc17329f2ade1ef5","ios":"1:537792897840:ios:3cb0d8f27a6e5fc1de1ef5","macos":"1:537792897840:ios:3cb0d8f27a6e5fc1de1ef5","web":"1:537792897840:web:4b1aa27d8abf1207de1ef5","windows":"1:537792897840:web:437c0e1223b7cf0bde1ef5"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "smart-room-iot-353c5",
+          "appId": "1:537792897840:android:f68f18dc17329f2ade1ef5",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "smart-room-iot-353c5",
+          "configurations": {
+            "android": "1:537792897840:android:f68f18dc17329f2ade1ef5",
+            "ios": "1:537792897840:ios:3cb0d8f27a6e5fc1de1ef5",
+            "macos": "1:537792897840:ios:3cb0d8f27a6e5fc1de1ef5",
+            "web": "1:537792897840:web:4b1aa27d8abf1207de1ef5",
+            "windows": "1:537792897840:web:437c0e1223b7cf0bde1ef5"
+          }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  }
+}

@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/services/app_firestore_service.dart';
+import 'admin_member_profile_screen.dart';
 
 class AdminUserManagementScreen extends StatelessWidget {
   const AdminUserManagementScreen({
@@ -58,6 +59,7 @@ class AdminUserManagementScreen extends StatelessWidget {
             separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (context, index) {
               final data = users[index].data();
+              final userId = users[index].id;
               final name = (data['name'] ?? data['displayName'] ?? 'Tai khoan')
                   .toString();
               final email = (data['email'] ?? '').toString();
@@ -70,6 +72,18 @@ class AdminUserManagementScreen extends StatelessWidget {
                   title: Text(name),
                   subtitle: Text(email.isEmpty ? UserRole.label(role) : email),
                   trailing: Chip(label: Text(UserRole.label(role))),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => AdminMemberProfileScreen(
+                          userId: userId,
+                          userData: data,
+                          buildingId: buildingId,
+                          buildingName: buildingName,
+                        ),
+                      ),
+                    );
+                  },
                 ),
               );
             },

@@ -20,6 +20,12 @@ class AppFirestoreService {
   static CollectionReference<Map<String, dynamic>> get chats =>
       db.collection('chats');
 
+  static CollectionReference<Map<String, dynamic>> buildingRooms(
+    String buildingId,
+  ) {
+    return buildings.doc(buildingId).collection('rooms');
+  }
+
   static CollectionReference<Map<String, dynamic>> chatMessages(String chatId) {
     return chats.doc(chatId).collection('messages');
   }
