@@ -20,6 +20,10 @@ class AppFirestoreService {
   static CollectionReference<Map<String, dynamic>> get chats =>
       db.collection('chats');
 
+  static CollectionReference<Map<String, dynamic>> chatMessages(String chatId) {
+    return chats.doc(chatId).collection('messages');
+  }
+
   static Future<void> saveUserProfile({
     required String uid,
     required String email,

@@ -16,6 +16,7 @@ class AdminSettingsScreen extends StatefulWidget {
 class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   final _nameController = TextEditingController();
   final _addressController = TextEditingController();
+  final _floorCountController = TextEditingController();
   final _totalRoomsController = TextEditingController();
   final _defaultRentController = TextEditingController();
 
@@ -34,6 +35,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   void dispose() {
     _nameController.dispose();
     _addressController.dispose();
+    _floorCountController.dispose();
     _totalRoomsController.dispose();
     _defaultRentController.dispose();
     super.dispose();
@@ -57,6 +59,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         _buildingId = doc.id;
         _nameController.text = (data['name'] ?? '').toString();
         _addressController.text = (data['address'] ?? '').toString();
+        _floorCountController.text = (data['floorCount'] ?? '').toString();
         _totalRoomsController.text = (data['totalRooms'] ?? '').toString();
         _defaultRentController.text = (data['defaultRent'] ?? '').toString();
       }
@@ -85,6 +88,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         'adminName': widget.user.displayName ?? widget.user.email ?? 'Admin',
         'name': _nameController.text.trim(),
         'address': _addressController.text.trim(),
+        'floorCount': int.tryParse(_floorCountController.text.trim()) ?? 0,
         'totalRooms': int.tryParse(_totalRoomsController.text.trim()) ?? 0,
         'defaultRent': int.tryParse(_defaultRentController.text.trim()) ?? 0,
         'createdAt': FieldValue.serverTimestamp(),
@@ -151,16 +155,16 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       padding: const EdgeInsets.all(16),
       children: [
         Text(
-          'Thiết lập toà nhà',
-          style: Theme.of(
-            context,
-          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+          'Thiet lap toa nha',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
         ),
         const SizedBox(height: 16),
         TextField(
           controller: _nameController,
           decoration: const InputDecoration(
-            labelText: 'Tên toà nhà',
+            labelText: 'Ten toa nha',
             border: OutlineInputBorder(),
           ),
         ),
@@ -168,7 +172,16 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         TextField(
           controller: _addressController,
           decoration: const InputDecoration(
-            labelText: 'Địa chỉ toà nhà',
+            labelText: 'Dia chi toa nha',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _floorCountController,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'So tang',
             border: OutlineInputBorder(),
           ),
         ),
@@ -177,7 +190,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           controller: _totalRoomsController,
           keyboardType: TextInputType.number,
           decoration: const InputDecoration(
-            labelText: 'Tổng số phòng',
+            labelText: 'Tong so phong',
             border: OutlineInputBorder(),
           ),
         ),
@@ -186,7 +199,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           controller: _defaultRentController,
           keyboardType: TextInputType.number,
           decoration: const InputDecoration(
-            labelText: 'Tiền thuê mặc định',
+            labelText: 'Tien thue mac dinh',
             border: OutlineInputBorder(),
           ),
         ),
@@ -194,7 +207,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         FilledButton.icon(
           onPressed: _isSaving ? null : _saveBuilding,
           icon: const Icon(Icons.save_outlined),
-          label: const Text('Lưu thiết lập'),
+          label: const Text('Luu thiet lap'),
         ),
       ],
     );

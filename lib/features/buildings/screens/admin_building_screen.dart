@@ -5,9 +5,15 @@ import 'package:flutter/material.dart';
 import '../../../core/services/app_firestore_service.dart';
 
 class AdminBuildingScreen extends StatelessWidget {
-  const AdminBuildingScreen({required this.user, super.key});
+  const AdminBuildingScreen({
+    required this.user,
+    required this.onOpenUserManagement,
+    super.key,
+  });
 
   final User user;
+  final void Function(String buildingId, String buildingName)
+      onOpenUserManagement;
 
   @override
   Widget build(BuildContext context) {
@@ -46,7 +52,11 @@ class AdminBuildingScreen extends StatelessWidget {
             const SizedBox(height: 16),
             _BuildingStats(buildingId: buildingId, building: building),
             const SizedBox(height: 16),
-            const _AdminActionGrid(),
+            _AdminActionGrid(
+              buildingId: buildingId,
+              building: building,
+              onOpenUserManagement: onOpenUserManagement,
+            ),
             const SizedBox(height: 16),
             _JoinRequestBoard(buildingId: buildingId),
           ],
@@ -232,13 +242,22 @@ class _RoomPiePainter extends CustomPainter {
 }
 
 class _AdminActionGrid extends StatelessWidget {
-  const _AdminActionGrid();
+  const _AdminActionGrid({
+    required this.buildingId,
+    required this.building,
+    required this.onOpenUserManagement,
+  });
+
+  final String buildingId;
+  final Map<String, dynamic> building;
+  final void Function(String buildingId, String buildingName)
+      onOpenUserManagement;
 
   static const _actions = [
-    (Icons.apartment_outlined, 'Quản lý tòa nhà'),
-    (Icons.people_outline, 'Quản lý người dùng'),
-    (Icons.receipt_long_outlined, 'Hóa đơn'),
-    (Icons.emergency_outlined, 'Khẩn cấp'),
+    _AdminAction('building', Icons.apartment_outlined, 'Quản lý tòa nhà'),
+    _AdminAction('users', Icons.people_outline, 'Quản lý người dùng'),
+    _AdminAction('bills', Icons.receipt_long_outlined, 'Hóa đơn'),
+    _AdminAction('emergency', Icons.emergency_outlined, 'Khẩn cấp'),
   ];
 
   @override
@@ -254,13 +273,13 @@ class _AdminActionGrid extends StatelessWidget {
         return Card(
           elevation: 1,
           child: InkWell(
-            onTap: () {},
+            onTap: () => _handleActionTap(context, action.id),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(action.$1, color: Colors.blueAccent),
+                Icon(action.icon, color: Colors.blueAccent),
                 const SizedBox(height: 8),
-                Text(action.$2, textAlign: TextAlign.center),
+                Text(action.label, textAlign: TextAlign.center),
               ],
             ),
           ),
@@ -268,6 +287,23 @@ class _AdminActionGrid extends StatelessWidget {
       }).toList(),
     );
   }
+
+  void _handleActionTap(BuildContext context, String actionId) {
+    if (actionId == 'users') {
+      onOpenUserManagement(
+        buildingId,
+        (building['name'] ?? 'toa nha').toString(),
+      );
+    }
+  }
+}
+
+class _AdminAction {
+  const _AdminAction(this.id, this.icon, this.label);
+
+  final String id;
+  final IconData icon;
+  final String label;
 }
 
 class _JoinRequestBoard extends StatelessWidget {

@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/services/app_firestore_service.dart';
+import '../../messages/screens/chat_detail_screen.dart';
 
 class FeedScreen extends StatefulWidget {
   const FeedScreen({
@@ -225,6 +226,7 @@ class _BuildingDiscoveryTile extends StatelessWidget {
   Future<void> _messageAdmin(BuildContext context) async {
     final adminId = (building['adminId'] ?? '').toString();
     if (adminId.isEmpty) return;
+    final title = 'Chat với admin ${(building['adminName'] ?? '').toString()}';
 
     final existing = await AppFirestoreService.chats
         .where('type', isEqualTo: ChatType.private)
@@ -236,22 +238,32 @@ class _BuildingDiscoveryTile extends StatelessWidget {
       return members.contains(adminId);
     }).toList();
 
+    String chatId;
     if (found.isEmpty) {
-      await AppFirestoreService.chats.add({
+      final chatDoc = await AppFirestoreService.chats.add({
         'type': ChatType.private,
         'buildingId': buildingId,
         'ownerId': adminId,
-        'title': 'Chat với admin ${(building['adminName'] ?? '').toString()}',
+        'title': title,
         'memberIds': [user.uid, adminId],
         'lastMessage': '',
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
+      chatId = chatDoc.id;
+    } else {
+      chatId = found.first.id;
     }
 
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đã tạo cuộc trò chuyện với admin.')),
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ChatDetailScreen(
+            chatId: chatId,
+            chatTitle: title,
+            user: user,
+          ),
+        ),
       );
     }
   }
