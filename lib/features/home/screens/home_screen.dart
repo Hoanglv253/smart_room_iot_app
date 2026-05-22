@@ -27,7 +27,9 @@ class HomeScreen extends StatelessWidget {
         }
 
         final role = snapshot.data ?? UserRole.user;
-        final onLogout = (BuildContext context) => _logout(context, authService);
+        Future<void> onLogout(BuildContext context) {
+          return _logout(context, authService);
+        }
 
         return switch (role) {
           UserRole.admin => AdminHomeScreen(user: user, onLogout: onLogout),

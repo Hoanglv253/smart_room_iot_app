@@ -411,7 +411,7 @@ class _RoomDetailScreenState extends State<_RoomDetailScreen> {
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: DropdownButtonFormField<String>(
-                      value: _status,
+                      initialValue: _status,
                       decoration: const InputDecoration(
                         labelText: 'Trang thai',
                         border: OutlineInputBorder(),
@@ -547,7 +547,7 @@ class _RoomDetailScreenState extends State<_RoomDetailScreen> {
       });
 
       if (hasTenant) {
-        batch.update(AppFirestoreService.users.doc(tenantUserId!), {
+        batch.update(AppFirestoreService.users.doc(tenantUserId), {
           'roomName': roomName,
           'roomNumber': room.number,
           'updatedAt': FieldValue.serverTimestamp(),
@@ -942,7 +942,7 @@ class _TenantPickerSheetState extends State<_TenantPickerSheet> {
 
                     return ListView.separated(
                       itemCount: tenants.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
                       itemBuilder: (context, index) {
                         final doc = tenants[index];
                         final data = doc.data();
