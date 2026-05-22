@@ -286,6 +286,8 @@ class _ManagerActionGrid extends StatelessWidget {
           builder: (_) => AdminRoomManagementScreen(
             buildingId: buildingId,
             building: building,
+            canEditRoom: false,
+            canManageTenant: false,
           ),
         ),
       );

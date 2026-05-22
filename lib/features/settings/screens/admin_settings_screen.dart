@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/services/app_firestore_service.dart';
+import 'admin_ad_settings_screen.dart';
 
 class AdminSettingsScreen extends StatefulWidget {
   const AdminSettingsScreen({required this.user, super.key});
@@ -363,7 +364,14 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       return chat['type'] == ChatType.group && chat['buildingId'] == buildingId;
     }).toList();
 
-    if (matchedChats.isNotEmpty) return;
+    if (matchedChats.isNotEmpty) {
+      await matchedChats.first.reference.update({
+        'memberIds': FieldValue.arrayUnion([widget.user.uid]),
+        'deletedFor': FieldValue.arrayRemove([widget.user.uid]),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      return;
+    }
 
     await AppFirestoreService.chats.add({
       'type': ChatType.group,
@@ -373,6 +381,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           ? 'Nhom chat toa nha'
           : _nameController.text.trim(),
       'memberIds': [widget.user.uid],
+      'deletedFor': [],
+      'isDeleted': false,
       'lastMessage': '',
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
@@ -383,6 +393,23 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
+    );
+  }
+
+  void _openAdSettings() {
+    final buildingId = _buildingId;
+    if (buildingId == null || buildingId.isEmpty) {
+      _showSnack('Hay luu thiet lap toa nha truoc khi tao quang cao.');
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AdminAdSettingsScreen(
+          user: widget.user,
+          buildingId: buildingId,
+        ),
+      ),
     );
   }
 
@@ -431,6 +458,12 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Colors.black54,
               ),
+        ),
+        const SizedBox(height: 16),
+        OutlinedButton.icon(
+          onPressed: _openAdSettings,
+          icon: const Icon(Icons.campaign_outlined),
+          label: const Text('Thiet lap quang cao'),
         ),
         const SizedBox(height: 16),
         _SettingsSection(

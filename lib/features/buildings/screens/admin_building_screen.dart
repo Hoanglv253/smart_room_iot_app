@@ -472,6 +472,8 @@ class _JoinRequestBoard extends StatelessWidget {
         'ownerId': adminId,
         'title': (data['buildingName'] ?? 'Nhom chat toa nha').toString(),
         'memberIds': [adminId, requesterId],
+        'deletedFor': [],
+        'isDeleted': false,
         'lastMessage': '',
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
@@ -481,6 +483,7 @@ class _JoinRequestBoard extends StatelessWidget {
 
     await matchedChats.first.reference.update({
       'memberIds': FieldValue.arrayUnion([requesterId]),
+      'deletedFor': FieldValue.arrayRemove([adminId, requesterId]),
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }

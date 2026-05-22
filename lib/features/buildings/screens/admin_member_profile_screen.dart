@@ -78,9 +78,32 @@ class _AdminMemberProfileScreenState extends State<AdminMemberProfileScreen> {
     setState(() => _isRemoving = true);
 
     try {
-      await AppFirestoreService.users.doc(widget.userId).update({
-        'buildingId': null,
-        'updatedAt': FieldValue.serverTimestamp(),
+      await AppFirestoreService.db.runTransaction((transaction) async {
+        final userRef = AppFirestoreService.users.doc(widget.userId);
+        final roomId = (widget.userData['roomId'] ?? '').toString();
+        final roomRef = roomId.isNotEmpty
+            ? AppFirestoreService.buildingRooms(widget.buildingId).doc(roomId)
+            : null;
+        final roomSnapshot =
+            roomRef == null ? null : await transaction.get(roomRef);
+
+        transaction.update(userRef, {
+          'buildingId': null,
+          'roomId': FieldValue.delete(),
+          'roomNumber': FieldValue.delete(),
+          'roomName': FieldValue.delete(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+
+        if (roomRef != null && roomSnapshot?.exists == true) {
+          transaction.update(roomRef, {
+            'tenantId': FieldValue.delete(),
+            'tenantName': FieldValue.delete(),
+            'tenantEmail': FieldValue.delete(),
+            'status': 'available',
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
       });
 
       await _removeFromBuildingGroupChat();

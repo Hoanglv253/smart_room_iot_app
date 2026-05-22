@@ -26,6 +26,12 @@ class AppFirestoreService {
     return buildings.doc(buildingId).collection('rooms');
   }
 
+  static CollectionReference<Map<String, dynamic>> buildingComments(
+    String buildingId,
+  ) {
+    return buildings.doc(buildingId).collection('comments');
+  }
+
   static CollectionReference<Map<String, dynamic>> chatMessages(String chatId) {
     return chats.doc(chatId).collection('messages');
   }

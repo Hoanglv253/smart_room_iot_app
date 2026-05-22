@@ -51,10 +51,7 @@ service cloud.firestore {
 
     match /posts/{postId} {
       allow read: if signedIn();
-      allow create: if signedIn()
-        && request.resource.data.authorId == request.auth.uid;
-      allow update, delete: if signedIn()
-        && resource.data.authorId == request.auth.uid;
+      allow create, update, delete: if false;
     }
 
     match /buildings/{buildingId} {
@@ -67,6 +64,13 @@ service cloud.firestore {
       match /rooms/{roomId} {
         allow read: if signedIn();
         allow create, update, delete: if isBuildingAdmin(buildingId);
+      }
+
+      match /comments/{commentId} {
+        allow read: if signedIn();
+        allow create: if signedIn()
+          && request.resource.data.authorId == request.auth.uid;
+        allow update, delete: if false;
       }
     }
 
