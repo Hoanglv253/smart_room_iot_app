@@ -33,7 +33,23 @@ class MessagesScreen extends StatelessWidget {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final chats = snapshot.data?.docs ?? [];
+        final chats = (snapshot.data?.docs ?? []).where((doc) {
+          final data = doc.data();
+          final isGroup = data['type'] == ChatType.group;
+          final deletedFor = List<String>.from(data['deletedFor'] ?? []);
+          return data['isDeleted'] != true &&
+              (isGroup || !deletedFor.contains(user.uid));
+        }).toList()
+          ..sort((left, right) {
+            final leftGroup = left.data()['type'] == ChatType.group;
+            final rightGroup = right.data()['type'] == ChatType.group;
+            if (leftGroup != rightGroup) return leftGroup ? -1 : 1;
+
+            final leftUpdatedAt = _timestampMillis(left.data()['updatedAt']);
+            final rightUpdatedAt = _timestampMillis(right.data()['updatedAt']);
+            return rightUpdatedAt.compareTo(leftUpdatedAt);
+          });
+
         if (chats.isEmpty) {
           return const Center(
             child: Padding(
@@ -72,6 +88,9 @@ class MessagesScreen extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
+                trailing: isGroup
+                    ? const Icon(Icons.push_pin_outlined, color: Colors.blueAccent)
+                    : null,
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
@@ -83,11 +102,70 @@ class MessagesScreen extends StatelessWidget {
                     ),
                   );
                 },
+                onLongPress: isGroup
+                    ? null
+                    : () => _confirmDeleteChat(context, doc.id),
               ),
             );
           },
         );
       },
     );
+  }
+
+  Future<void> _confirmDeleteChat(BuildContext context, String chatId) async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Xoa doan chat?'),
+          content: const Text('Ban co chac chan muon xoa doan chat khong?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Huy'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Co'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldDelete != true || !context.mounted) return;
+
+    try {
+      await AppFirestoreService.chats.doc(chatId).update({
+        'memberIds': [],
+        'deletedFor': [],
+        'isDeleted': true,
+        'deletedBy': user.uid,
+        'deletedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Da xoa khung chat.')),
+      );
+    } on FirebaseException catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.code == 'permission-denied'
+                ? 'Firestore chua cap quyen xoa khung chat.'
+                : e.message ?? 'Khong xoa duoc khung chat.',
+          ),
+        ),
+      );
+    }
+  }
+
+  static int _timestampMillis(Object? value) {
+    if (value is Timestamp) return value.millisecondsSinceEpoch;
+    return 0;
   }
 }
