@@ -32,6 +32,12 @@ class AppFirestoreService {
     return buildings.doc(buildingId).collection('comments');
   }
 
+  static CollectionReference<Map<String, dynamic>> buildingInvoices(
+    String buildingId,
+  ) {
+    return buildings.doc(buildingId).collection('invoices');
+  }
+
   static CollectionReference<Map<String, dynamic>> chatMessages(String chatId) {
     return chats.doc(chatId).collection('messages');
   }
@@ -97,4 +103,14 @@ class ChatType {
 
   static const private = 'private';
   static const group = 'group';
+}
+
+class InvoiceStatus {
+  InvoiceStatus._();
+
+  static const unpaid = 'unpaid';
+  static const pending = 'pending';
+  static const paid = 'paid';
+  static const overdue = 'overdue';
+  static const cancelled = 'cancelled';
 }
