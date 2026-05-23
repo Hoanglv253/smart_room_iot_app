@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/services/app_firestore_service.dart';
+import 'tenant_invoice_screen.dart';
 
 class TenantRoomScreen extends StatelessWidget {
   const TenantRoomScreen({required this.user, super.key});
@@ -44,6 +45,7 @@ class TenantRoomScreen extends StatelessWidget {
         }
 
         return _TenantRoomDetail(
+          user: user,
           buildingId: buildingId,
           roomId: roomId,
         );
@@ -54,10 +56,12 @@ class TenantRoomScreen extends StatelessWidget {
 
 class _TenantRoomDetail extends StatelessWidget {
   const _TenantRoomDetail({
+    required this.user,
     required this.buildingId,
     required this.roomId,
   });
 
+  final User user;
   final String buildingId;
   final String roomId;
 
@@ -98,6 +102,7 @@ class _TenantRoomDetail extends StatelessWidget {
 
             final room = roomSnapshot.data!.data() ?? {};
             return _RoomDashboard(
+              user: user,
               buildingId: buildingId,
               roomId: roomId,
               building: building,
@@ -112,12 +117,14 @@ class _TenantRoomDetail extends StatelessWidget {
 
 class _RoomDashboard extends StatelessWidget {
   const _RoomDashboard({
+    required this.user,
     required this.buildingId,
     required this.roomId,
     required this.building,
     required this.room,
   });
 
+  final User user;
   final String buildingId;
   final String roomId;
   final Map<String, dynamic> building;
@@ -200,6 +207,17 @@ class _RoomDashboard extends StatelessWidget {
               title: 'THANH TOAN',
               subtitle:
                   rent > 0 ? 'Tien phong: ${_money(rent)}' : 'Chua co hoa don',
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => TenantInvoiceScreen(
+                      user: user,
+                      buildingId: buildingId,
+                      roomId: roomId,
+                    ),
+                  ),
+                );
+              },
             ),
             const _DashboardTile(
               icon: Icons.settings_input_component_outlined,

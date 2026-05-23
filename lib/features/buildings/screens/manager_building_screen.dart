@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/services/app_firestore_service.dart';
 import 'admin_room_management_screen.dart';
+import 'admin_invoice_management_screen.dart';
 import 'admin_user_management_screen.dart';
 
 class ManagerBuildingScreen extends StatelessWidget {
@@ -300,6 +301,20 @@ class _ManagerActionGrid extends StatelessWidget {
           builder: (_) => AdminUserManagementScreen(
             buildingId: buildingId,
             buildingName: (building['name'] ?? 'tòa nhà').toString(),
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (actionId == 'bills') {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => AdminInvoiceManagementScreen(
+            buildingId: buildingId,
+            building: building,
+            canCreate: false,
+            canConfirmPayment: false,
           ),
         ),
       );

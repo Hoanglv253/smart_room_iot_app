@@ -72,6 +72,26 @@ service cloud.firestore {
           && request.resource.data.authorId == request.auth.uid;
         allow update, delete: if false;
       }
+
+      match /invoices/{invoiceId} {
+        allow read: if signedIn();
+        allow create, delete: if isBuildingAdmin(buildingId);
+        allow update: if isBuildingAdmin(buildingId)
+          || (
+            signedIn()
+            && resource.data.tenantId == request.auth.uid
+            && resource.data.status == 'unpaid'
+            && request.resource.data.status == 'pending'
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly([
+                'status',
+                'paymentMethod',
+                'paymentNote',
+                'paidReportedAt',
+                'updatedAt'
+              ])
+          );
+      }
     }
 
     match /joinRequests/{requestId} {

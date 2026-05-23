@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/services/app_firestore_service.dart';
+import 'admin_invoice_management_screen.dart';
 import 'admin_room_management_screen.dart';
 
 class AdminBuildingScreen extends StatelessWidget {
@@ -306,6 +307,18 @@ class _AdminActionGrid extends StatelessWidget {
       onOpenUserManagement(
         buildingId,
         (building['name'] ?? 'toa nha').toString(),
+      );
+      return;
+    }
+
+    if (actionId == 'bills') {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => AdminInvoiceManagementScreen(
+            buildingId: buildingId,
+            building: building,
+          ),
+        ),
       );
     }
   }
