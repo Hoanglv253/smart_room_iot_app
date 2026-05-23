@@ -109,6 +109,7 @@ class InvoiceStatus {
   InvoiceStatus._();
 
   static const unpaid = 'unpaid';
+  static const waitingPayment = 'waiting_payment';
   static const pending = 'pending';
   static const paid = 'paid';
   static const overdue = 'overdue';

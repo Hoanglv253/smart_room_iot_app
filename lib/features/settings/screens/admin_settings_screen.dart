@@ -31,6 +31,11 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   final _parkingFeeController = TextEditingController();
   final _billCloseDayController = TextEditingController();
   final _billDueDayController = TextEditingController();
+  final _bankNameController = TextEditingController();
+  final _bankIdController = TextEditingController();
+  final _bankAccountNumberController = TextEditingController();
+  final _bankAccountHolderController = TextEditingController();
+  final _transferContentController = TextEditingController();
   final _rulesController = TextEditingController();
 
   String? _buildingId;
@@ -79,6 +84,11 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     _parkingFeeController.dispose();
     _billCloseDayController.dispose();
     _billDueDayController.dispose();
+    _bankNameController.dispose();
+    _bankIdController.dispose();
+    _bankAccountNumberController.dispose();
+    _bankAccountHolderController.dispose();
+    _transferContentController.dispose();
     _rulesController.dispose();
     super.dispose();
   }
@@ -110,6 +120,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         final amenities = _readMap(data['amenities']);
         final joinSettings = _readMap(data['joinSettings']);
         final displaySettings = _readMap(data['displaySettings']);
+        final paymentSettings = _readMap(data['paymentSettings']);
 
         _buildingId = doc.id;
         _setText(_nameController, data['name']);
@@ -128,6 +139,20 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         _setText(_parkingFeeController, data['parkingFee']);
         _setText(_billCloseDayController, data['billCloseDay']);
         _setText(_billDueDayController, data['billDueDay']);
+        _setText(_bankNameController, paymentSettings['bankName']);
+        _setText(_bankIdController, paymentSettings['bankId']);
+        _setText(
+          _bankAccountNumberController,
+          paymentSettings['bankAccountNumber'],
+        );
+        _setText(
+          _bankAccountHolderController,
+          paymentSettings['bankAccountHolder'],
+        );
+        _setText(
+          _transferContentController,
+          paymentSettings['transferContentTemplate'],
+        );
         _setText(_rulesController, data['rulesText']);
 
         _wifi = _readBool(amenities['wifi'], fallback: _wifi);
@@ -248,6 +273,13 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           'showAddress': _showAddress,
           'showRoomPrice': _showRoomPrice,
           'showAvailableRooms': _showAvailableRooms,
+        },
+        'paymentSettings': {
+          'bankName': _bankNameController.text.trim(),
+          'bankId': _bankIdController.text.trim(),
+          'bankAccountNumber': _bankAccountNumberController.text.trim(),
+          'bankAccountHolder': _bankAccountHolderController.text.trim(),
+          'transferContentTemplate': _transferContentController.text.trim(),
         },
         if (isNewBuilding) 'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
@@ -565,6 +597,30 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                   ),
                 ),
               ],
+            ),
+          ],
+        ),
+        _SettingsSection(
+          title: 'Thong tin chuyen khoan',
+          children: [
+            _buildTextField(_bankNameController, 'Ten ngan hang'),
+            _buildTextField(
+              _bankIdController,
+              'Ma ngan hang VietQR',
+              helperText: 'Nhap BIN hoac code ngan hang, vi du VCB, MB, 970436.',
+            ),
+            _buildTextField(
+              _bankAccountNumberController,
+              'So tai khoan',
+              keyboardType: TextInputType.number,
+            ),
+            _buildTextField(_bankAccountHolderController, 'Chu tai khoan'),
+            _buildTextField(
+              _transferContentController,
+              'Noi dung chuyen khoan mau',
+              helperText:
+                  'Co the dung {room}, {month}, {year}, {name} de app tu thay.',
+              maxLines: 2,
             ),
           ],
         ),

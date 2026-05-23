@@ -15,6 +15,7 @@ class _InvoiceStatusOption {
 const _invoiceStatusOptions = [
   _InvoiceStatusOption(_allInvoiceStatus, 'Tat ca'),
   _InvoiceStatusOption(InvoiceStatus.unpaid, 'Chua TT'),
+  _InvoiceStatusOption(InvoiceStatus.waitingPayment, 'Dang TT'),
   _InvoiceStatusOption(InvoiceStatus.pending, 'Cho xac nhan'),
   _InvoiceStatusOption(InvoiceStatus.paid, 'Da TT'),
   _InvoiceStatusOption(InvoiceStatus.overdue, 'Qua han'),
@@ -139,6 +140,8 @@ class _AdminInvoiceManagementScreenState
             padding: const EdgeInsets.all(16),
             children: [
               periodPicker,
+              const SizedBox(height: 12),
+              _InvoiceRevenueOverview(invoices: monthlyInvoices),
               const SizedBox(height: 12),
               _InvoiceStatusFilterBar(
                 invoices: monthlyInvoices,
@@ -265,6 +268,126 @@ class _InvoiceStatusFilterBar extends StatelessWidget {
       final dataStatus = (doc.data()['status'] ?? InvoiceStatus.unpaid).toString();
       return dataStatus == status;
     }).length;
+  }
+}
+
+class _InvoiceRevenueOverview extends StatelessWidget {
+  const _InvoiceRevenueOverview({required this.invoices});
+
+  final List<QueryDocumentSnapshot<Map<String, dynamic>>> invoices;
+
+  @override
+  Widget build(BuildContext context) {
+    final paidTotal = _sumByStatus(InvoiceStatus.paid);
+    final pendingTotal = _sumByStatus(InvoiceStatus.pending);
+    final unpaidTotal = _sumUnpaid();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Tong quan doanh thu',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _RevenueTile(
+                label: 'Da thu',
+                value: paidTotal,
+                icon: Icons.check_circle_outline,
+                color: Colors.green,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _RevenueTile(
+                label: 'Cho xac nhan',
+                value: pendingTotal,
+                icon: Icons.hourglass_top_outlined,
+                color: Colors.orange,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _RevenueTile(
+                label: 'Chua thu',
+                value: unpaidTotal,
+                icon: Icons.pending_actions_outlined,
+                color: Colors.blueAccent,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  int _sumByStatus(String status) {
+    return invoices.where((doc) {
+      final dataStatus = (doc.data()['status'] ?? InvoiceStatus.unpaid).toString();
+      return dataStatus == status;
+    }).fold<int>(0, (total, doc) => total + _readInt(doc.data()['totalAmount']));
+  }
+
+  int _sumUnpaid() {
+    return invoices.where((doc) {
+      final status = (doc.data()['status'] ?? InvoiceStatus.unpaid).toString();
+      return status != InvoiceStatus.paid &&
+          status != InvoiceStatus.pending &&
+          status != InvoiceStatus.cancelled;
+    }).fold<int>(0, (total, doc) => total + _readInt(doc.data()['totalAmount']));
+  }
+}
+
+class _RevenueTile extends StatelessWidget {
+  const _RevenueTile({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+
+  final String label;
+  final int value;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 12, color: Colors.black54),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            _money(value),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -1313,6 +1436,7 @@ String _dateText(Object? value) {
 
 String _statusLabel(String status) {
   return switch (status) {
+    InvoiceStatus.waitingPayment => 'Dang thanh toan PayOS',
     InvoiceStatus.pending => 'Cho xac nhan',
     InvoiceStatus.paid => 'Da thanh toan',
     InvoiceStatus.overdue => 'Qua han',
@@ -1324,6 +1448,7 @@ String _statusLabel(String status) {
 String _statusFilterText(String status) {
   return switch (status) {
     InvoiceStatus.unpaid => 'chua thanh toan ',
+    InvoiceStatus.waitingPayment => 'dang thanh toan ',
     InvoiceStatus.pending => 'cho xac nhan ',
     InvoiceStatus.paid => 'da thanh toan ',
     InvoiceStatus.overdue => 'qua han ',
@@ -1334,6 +1459,7 @@ String _statusFilterText(String status) {
 
 Color _statusColor(String status) {
   return switch (status) {
+    InvoiceStatus.waitingPayment => Colors.purple,
     InvoiceStatus.pending => Colors.orange,
     InvoiceStatus.paid => Colors.green,
     InvoiceStatus.overdue => Colors.redAccent,
