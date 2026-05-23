@@ -1,10 +1,15 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/services/app_firestore_service.dart';
 
 const _allInvoiceStatus = 'all';
+const _payosBackendBaseUrl = String.fromEnvironment('PAYOS_BACKEND_URL');
 
 class _InvoiceStatusOption {
   const _InvoiceStatusOption(this.value, this.label);
@@ -16,6 +21,7 @@ class _InvoiceStatusOption {
 const _invoiceStatusOptions = [
   _InvoiceStatusOption(_allInvoiceStatus, 'Tat ca'),
   _InvoiceStatusOption(InvoiceStatus.unpaid, 'Chua TT'),
+  _InvoiceStatusOption(InvoiceStatus.waitingPayment, 'Dang TT'),
   _InvoiceStatusOption(InvoiceStatus.pending, 'Cho xac nhan'),
   _InvoiceStatusOption(InvoiceStatus.paid, 'Da TT'),
   _InvoiceStatusOption(InvoiceStatus.overdue, 'Qua han'),
@@ -417,6 +423,7 @@ class _TenantInvoiceDetailScreen extends StatefulWidget {
 class _TenantInvoiceDetailScreenState extends State<_TenantInvoiceDetailScreen> {
   final _noteController = TextEditingController();
   bool _isSending = false;
+  bool _isCreatingPayosPayment = false;
 
   @override
   void dispose() {
@@ -456,11 +463,69 @@ class _TenantInvoiceDetailScreenState extends State<_TenantInvoiceDetailScreen> 
     }
   }
 
+  Future<void> _startPayosPayment() async {
+    setState(() => _isCreatingPayosPayment = true);
+
+    try {
+      if (_payosBackendBaseUrl.isEmpty) {
+        _showSnack('Chua cau hinh PAYOS_BACKEND_URL cho app.');
+        return;
+      }
+
+      final user = FirebaseAuth.instance.currentUser;
+      final idToken = await user?.getIdToken();
+      if (idToken == null) {
+        _showSnack('Hay dang nhap lai de thanh toan PayOS.');
+        return;
+      }
+
+      final response = await http.post(
+        _backendUri('/create-payos-payment'),
+        headers: {
+          'Authorization': 'Bearer $idToken',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'buildingId': widget.buildingId,
+          'invoiceId': widget.invoiceId,
+        }),
+      );
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        _showSnack(data['message']?.toString() ?? 'Khong tao duoc thanh toan PayOS.');
+        return;
+      }
+
+      final checkoutUrl = data['checkoutUrl']?.toString() ?? '';
+      final uri = Uri.tryParse(checkoutUrl);
+
+      if (uri == null || checkoutUrl.isEmpty) {
+        _showSnack('PayOS chua tra ve link thanh toan.');
+        return;
+      }
+
+      final opened = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!opened) {
+        _showSnack('Khong mo duoc link thanh toan PayOS.');
+      }
+    } catch (_) {
+      _showSnack('Khong tao duoc thanh toan PayOS.');
+    } finally {
+      if (mounted) setState(() => _isCreatingPayosPayment = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final invoice = widget.invoice;
     final status = (invoice['status'] ?? InvoiceStatus.unpaid).toString();
     final paymentNote = (invoice['paymentNote'] ?? '').toString();
+    final canPayOnline = status == InvoiceStatus.unpaid ||
+        status == InvoiceStatus.waitingPayment;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Chi tiet hoa don')),
@@ -502,6 +567,32 @@ class _TenantInvoiceDetailScreenState extends State<_TenantInvoiceDetailScreen> 
           ),
           const SizedBox(height: 12),
           _TotalBox(total: _readInt(invoice['totalAmount'])),
+          if (canPayOnline || status == InvoiceStatus.pending) ...[
+            const SizedBox(height: 12),
+            _PaymentInstructionSection(
+              buildingId: widget.buildingId,
+              invoice: invoice,
+            ),
+          ],
+          if (canPayOnline) ...[
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed:
+                  _isCreatingPayosPayment ? null : _startPayosPayment,
+              icon: _isCreatingPayosPayment
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.payment_outlined),
+              label: Text(
+                status == InvoiceStatus.waitingPayment
+                    ? 'Mo lai thanh toan PayOS'
+                    : 'Thanh toan tu dong PayOS',
+              ),
+            ),
+          ],
           if (paymentNote.isNotEmpty) ...[
             const SizedBox(height: 12),
             _TenantInvoiceSection(
@@ -541,6 +632,11 @@ class _TenantInvoiceDetailScreenState extends State<_TenantInvoiceDetailScreen> 
       ),
     );
   }
+
+  void _showSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
 }
 
 class _PaymentRejectedNotice extends StatelessWidget {
@@ -563,6 +659,138 @@ class _PaymentRejectedNotice extends StatelessWidget {
           Expanded(
             child: Text(
               'Thanh toan truoc do chua duoc xac nhan. Ban co the gui lai thong tin thanh toan.',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PaymentInstructionSection extends StatelessWidget {
+  const _PaymentInstructionSection({
+    required this.buildingId,
+    required this.invoice,
+  });
+
+  final String buildingId;
+  final Map<String, dynamic> invoice;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      future: AppFirestoreService.buildings.doc(buildingId).get(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const _TenantInvoiceSection(
+            title: 'Huong dan thanh toan',
+            children: [
+              Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: LinearProgressIndicator(),
+              ),
+            ],
+          );
+        }
+
+        if (snapshot.hasError || snapshot.data?.data() == null) {
+          return const _TenantInvoiceSection(
+            title: 'Huong dan thanh toan',
+            children: [
+              _InfoRow(
+                label: 'Trang thai',
+                value: 'Chua tai duoc thong tin chuyen khoan.',
+              ),
+            ],
+          );
+        }
+
+        final building = snapshot.data!.data()!;
+        final settings = _readMap(building['paymentSettings']);
+        final bankName = _text(settings['bankName'], 'Chua thiet lap');
+        final bankId = _compactText(settings['bankId']);
+        final accountNumber =
+            _text(settings['bankAccountNumber'], 'Chua thiet lap');
+        final rawAccountNumber = _compactText(settings['bankAccountNumber']);
+        final accountHolder =
+            _text(settings['bankAccountHolder'], 'Chua thiet lap');
+        final rawAccountHolder = _text(settings['bankAccountHolder'], '');
+        final amount = _readInt(invoice['totalAmount']);
+        final transferContent = _transferContent(
+          settings['transferContentTemplate'],
+          invoice,
+        );
+        final canCreateQr = bankId.isNotEmpty &&
+            rawAccountNumber.isNotEmpty &&
+            amount > 0;
+        final vietQrUrl = canCreateQr
+            ? _vietQrUrl(
+                bankId: bankId,
+                accountNo: rawAccountNumber,
+                amount: amount,
+                addInfo: transferContent,
+                accountName: rawAccountHolder,
+              )
+            : '';
+
+        return _TenantInvoiceSection(
+          title: 'Huong dan thanh toan',
+          children: [
+            _InfoRow(label: 'Ngan hang', value: bankName),
+            _InfoRow(
+              label: 'Ma VietQR',
+              value: _text(settings['bankId'], 'Chua thiet lap'),
+            ),
+            _InfoRow(label: 'So tai khoan', value: accountNumber),
+            _InfoRow(label: 'Chu tai khoan', value: accountHolder),
+            _InfoRow(label: 'So tien', value: _money(invoice['totalAmount'])),
+            _InfoRow(label: 'Noi dung', value: transferContent),
+            const SizedBox(height: 12),
+            if (canCreateQr)
+              FilledButton.icon(
+                onPressed: () {
+                  _showVietQrDialog(
+                    context,
+                    qrUrl: vietQrUrl,
+                    bankName: bankName,
+                    accountNumber: accountNumber,
+                    accountHolder: accountHolder,
+                    amount: amount,
+                    transferContent: transferContent,
+                  );
+                },
+                icon: const Icon(Icons.qr_code_2_outlined),
+                label: const Text('Tao ma QR VietQR'),
+              )
+            else
+              const _VietQrMissingNotice(),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _VietQrMissingNotice extends StatelessWidget {
+  const _VietQrMissingNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline, color: Colors.orange, size: 20),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Admin can thiet lap ma ngan hang VietQR, so tai khoan va so tien hoa don de tao ma QR.',
             ),
           ),
         ],
@@ -736,6 +964,7 @@ String _dateText(Object? value) {
 
 String _statusLabel(String status) {
   return switch (status) {
+    InvoiceStatus.waitingPayment => 'Dang thanh toan PayOS',
     InvoiceStatus.pending => 'Cho xac nhan',
     InvoiceStatus.paid => 'Da thanh toan',
     InvoiceStatus.overdue => 'Qua han',
@@ -747,6 +976,7 @@ String _statusLabel(String status) {
 String _statusFilterText(String status) {
   return switch (status) {
     InvoiceStatus.unpaid => 'chua thanh toan ',
+    InvoiceStatus.waitingPayment => 'dang thanh toan ',
     InvoiceStatus.pending => 'cho xac nhan ',
     InvoiceStatus.paid => 'da thanh toan ',
     InvoiceStatus.overdue => 'qua han ',
@@ -757,6 +987,7 @@ String _statusFilterText(String status) {
 
 Color _statusColor(String status) {
   return switch (status) {
+    InvoiceStatus.waitingPayment => Colors.purple,
     InvoiceStatus.pending => Colors.orange,
     InvoiceStatus.paid => Colors.green,
     InvoiceStatus.overdue => Colors.redAccent,
@@ -770,9 +1001,147 @@ String _money(Object? value) {
   return '$amount VND';
 }
 
+void _showVietQrDialog(
+  BuildContext context, {
+  required String qrUrl,
+  required String bankName,
+  required String accountNumber,
+  required String accountHolder,
+  required int amount,
+  required String transferContent,
+}) {
+  showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      return Dialog(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Ma QR VietQR',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Center(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(
+                      qrUrl,
+                      width: 260,
+                      height: 260,
+                      fit: BoxFit.contain,
+                      loadingBuilder: (context, child, progress) {
+                        if (progress == null) return child;
+                        return const SizedBox(
+                          width: 260,
+                          height: 260,
+                          child: Center(child: CircularProgressIndicator()),
+                        );
+                      },
+                      errorBuilder: (context, error, stackTrace) {
+                        return const SizedBox(
+                          width: 260,
+                          height: 260,
+                          child: Center(
+                            child: Text(
+                              'Khong tai duoc ma QR VietQR.',
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _InfoRow(label: 'Ngan hang', value: bankName),
+                _InfoRow(label: 'So tai khoan', value: accountNumber),
+                _InfoRow(label: 'Chu tai khoan', value: accountHolder),
+                _InfoRow(label: 'So tien', value: _money(amount)),
+                _InfoRow(label: 'Noi dung', value: transferContent),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
 String _text(Object? value, String fallback) {
   final text = value?.toString().trim() ?? '';
   return text.isEmpty ? fallback : text;
+}
+
+String _compactText(Object? value) {
+  return value?.toString().trim().replaceAll(RegExp(r'\s+'), '') ?? '';
+}
+
+Map<String, dynamic> _readMap(Object? value) {
+  if (value is Map<String, dynamic>) return value;
+  if (value is Map) {
+    return value.map((key, dynamic value) => MapEntry(key.toString(), value));
+  }
+  return {};
+}
+
+String _transferContent(Object? template, Map<String, dynamic> invoice) {
+  final rawTemplate = template?.toString().trim() ?? '';
+  final month = _readInt(invoice['month']);
+  final year = _readInt(invoice['year']);
+  final room = _text(invoice['roomName'], 'Phong');
+  final tenantName = _text(invoice['tenantName'], 'Nguoi thue');
+  final fallback = 'Thanh toan $room thang $month/$year';
+
+  final resolvedTemplate = rawTemplate.isEmpty ? fallback : rawTemplate;
+  return resolvedTemplate
+      .replaceAll('{room}', room)
+      .replaceAll('{month}', month.toString())
+      .replaceAll('{year}', year.toString())
+      .replaceAll('{name}', tenantName);
+}
+
+String _vietQrUrl({
+  required String bankId,
+  required String accountNo,
+  required int amount,
+  required String addInfo,
+  required String accountName,
+}) {
+  return Uri.https(
+    'img.vietqr.io',
+    '/image/$bankId-$accountNo-compact2.png',
+    {
+      'amount': amount.toString(),
+      'addInfo': addInfo,
+      if (accountName.trim().isNotEmpty) 'accountName': accountName.trim(),
+    },
+  ).toString();
+}
+
+Uri _backendUri(String path) {
+  final baseUrl = _payosBackendBaseUrl.endsWith('/')
+      ? _payosBackendBaseUrl.substring(0, _payosBackendBaseUrl.length - 1)
+      : _payosBackendBaseUrl;
+  final normalizedPath = path.startsWith('/') ? path : '/$path';
+  return Uri.parse('$baseUrl$normalizedPath');
 }
 
 int _readInt(Object? value) {
