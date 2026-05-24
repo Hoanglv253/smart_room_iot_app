@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../../../core/services/app_firestore_service.dart';
+import '../view_models/admin_ad_settings_view_model.dart';
 
 class AdminAdSettingsScreen extends StatefulWidget {
   const AdminAdSettingsScreen({
@@ -19,105 +19,113 @@ class AdminAdSettingsScreen extends StatefulWidget {
 }
 
 class _AdminAdSettingsScreenState extends State<AdminAdSettingsScreen> {
-  bool _isSaving = false;
+  final _viewModel = AdminAdSettingsViewModel();
+
+  @override
+  void dispose() {
+    _viewModel.dispose();
+    super.dispose();
+  }
 
   Future<void> _publishAd() async {
-    setState(() => _isSaving = true);
+    final saved = await _viewModel.publishAd(
+      buildingId: widget.buildingId,
+      userId: widget.user.uid,
+    );
 
-    try {
-      await AppFirestoreService.buildings.doc(widget.buildingId).update({
-        'adPublished': true,
-        'adPublishedBy': widget.user.uid,
-        'adUpdatedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
+    if (saved) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Da day quang cao len trang chu.')),
       );
-    } on FirebaseException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.code == 'permission-denied'
-                ? 'Firestore chua cap quyen cap nhat quang cao toa nha.'
-                : e.message ?? 'Khong luu duoc quang cao.',
-          ),
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
+      return;
     }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(_publishErrorMessage())),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final buildingRef = AppFirestoreService.buildings.doc(widget.buildingId);
-
     return Scaffold(
       appBar: AppBar(title: const Text('Thiet lap quang cao')),
-      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        stream: buildingRef.snapshots(),
-        builder: (context, buildingSnapshot) {
-          if (buildingSnapshot.hasError) {
-            return const _AdEmptyState(
-              icon: Icons.lock_outline,
-              message: 'Khong tai duoc thong tin toa nha.',
-            );
-          }
+      body: AnimatedBuilder(
+        animation: _viewModel,
+        builder: (context, _) {
+          return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+            stream: _viewModel.building(widget.buildingId),
+            builder: (context, buildingSnapshot) {
+              if (buildingSnapshot.hasError) {
+                return const _AdEmptyState(
+                  icon: Icons.lock_outline,
+                  message: 'Khong tai duoc thong tin toa nha.',
+                );
+              }
 
-          if (buildingSnapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+              if (buildingSnapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          if (buildingSnapshot.data?.exists != true) {
-            return const _AdEmptyState(
-              icon: Icons.apartment_outlined,
-              message: 'Hay luu thiet lap toa nha truoc khi tao quang cao.',
-            );
-          }
+              if (buildingSnapshot.data?.exists != true) {
+                return const _AdEmptyState(
+                  icon: Icons.apartment_outlined,
+                  message: 'Hay luu thiet lap toa nha truoc khi tao quang cao.',
+                );
+              }
 
-          final building = buildingSnapshot.data!.data() ?? {};
+              final building = buildingSnapshot.data!.data() ?? {};
 
-          return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: AppFirestoreService.buildingRooms(widget.buildingId)
-                .orderBy('roomNumber')
-                .snapshots(),
-            builder: (context, roomSnapshot) {
-              final rooms = roomSnapshot.data?.docs ?? [];
+              return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                stream: _viewModel.buildingRooms(widget.buildingId),
+                builder: (context, roomSnapshot) {
+                  final rooms = roomSnapshot.data?.docs ?? [];
 
-              return ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  _BuildingPreviewCard(building: building),
-                  const SizedBox(height: 16),
-                  _RoomButtonSection(
-                    isLoading:
-                        roomSnapshot.connectionState == ConnectionState.waiting,
-                    hasError: roomSnapshot.hasError,
-                    rooms: rooms.map((doc) => doc.data()).toList(),
-                  ),
-                  const SizedBox(height: 16),
-                  FilledButton.icon(
-                    onPressed: _isSaving ? null : _publishAd,
-                    icon: _isSaving
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.campaign_outlined),
-                    label: const Text('Luu va day len trang chu'),
-                  ),
-                ],
+                  return ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      _BuildingPreviewCard(building: building),
+                      const SizedBox(height: 16),
+                      _RoomButtonSection(
+                        viewModel: _viewModel,
+                        buildingId: widget.buildingId,
+                        isLoading: roomSnapshot.connectionState ==
+                            ConnectionState.waiting,
+                        hasError: roomSnapshot.hasError,
+                        rooms: rooms,
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: _viewModel.isLoading ? null : _publishAd,
+                        icon: _viewModel.isLoading
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.campaign_outlined),
+                        label: const Text('Luu va day len trang chu'),
+                      ),
+                    ],
+                  );
+                },
               );
             },
           );
         },
       ),
     );
+  }
+
+  String _publishErrorMessage() {
+    if (_viewModel.errorMessage?.contains('permission-denied') == true) {
+      return 'Firestore chua cap quyen cap nhat quang cao toa nha.';
+    }
+
+    return 'Khong luu duoc quang cao.';
   }
 }
 
@@ -247,14 +255,18 @@ class _BuildingPreviewCard extends StatelessWidget {
 
 class _RoomButtonSection extends StatelessWidget {
   const _RoomButtonSection({
+    required this.viewModel,
+    required this.buildingId,
     required this.isLoading,
     required this.hasError,
     required this.rooms,
   });
 
+  final AdminAdSettingsViewModel viewModel;
+  final String buildingId;
   final bool isLoading;
   final bool hasError;
-  final List<Map<String, dynamic>> rooms;
+  final List<QueryDocumentSnapshot<Map<String, dynamic>>> rooms;
 
   @override
   Widget build(BuildContext context) {
@@ -266,10 +278,15 @@ class _RoomButtonSection extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Trang thai tat ca phong',
+              'Ảnh và trạng thái phòng',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Bấm vào từng phòng để thêm ảnh từ thư viện, đặt ảnh chính hoặc xóa ảnh.',
+              style: TextStyle(color: Colors.black54),
             ),
             const SizedBox(height: 12),
             if (isLoading)
@@ -279,30 +296,239 @@ class _RoomButtonSection extends StatelessWidget {
             else if (rooms.isEmpty)
               const Text('Chua co phong nao de hien thi.')
             else
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: rooms.map((room) {
-                  final name = (room['name'] ?? 'Phong').toString();
-                  final status = _statusFromRoom(room);
-                  final color = _statusColor(status);
-
-                  return OutlinedButton(
-                    onPressed: () {},
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: color,
-                      side: BorderSide(color: color.withValues(alpha: 0.45)),
-                      visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                    ),
-                    child: Text('$name - ${_statusLabel(status)}'),
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: rooms.length,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: MediaQuery.of(context).size.width >= 560 ? 3 : 2,
+                  mainAxisSpacing: 10,
+                  crossAxisSpacing: 10,
+                  childAspectRatio: 0.78,
+                ),
+                itemBuilder: (context, index) {
+                  final roomDoc = rooms[index];
+                  return _RoomImageTile(
+                    roomId: roomDoc.id,
+                    room: roomDoc.data(),
+                    onTap: () => _openRoomImages(context, roomDoc.id),
                   );
-                }).toList(),
+                },
               ),
           ],
         ),
       ),
     );
+  }
+
+  void _openRoomImages(BuildContext context, String roomId) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (sheetContext) {
+        return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          stream: viewModel.room(buildingId: buildingId, roomId: roomId),
+          builder: (context, snapshot) {
+            final room = snapshot.data?.data() ?? {};
+            final name = (room['name'] ?? roomId).toString();
+            final imageUrls = _imageUrls(room);
+            final coverImageUrl = (room['coverImageUrl'] ?? '').toString();
+
+            return AnimatedBuilder(
+              animation: viewModel,
+              builder: (context, _) {
+                return DraggableScrollableSheet(
+                  expand: false,
+                  initialChildSize: 0.86,
+                  minChildSize: 0.55,
+                  maxChildSize: 0.95,
+                  builder: (context, scrollController) {
+                    return ListView(
+                      controller: scrollController,
+                      padding: const EdgeInsets.fromLTRB(18, 18, 18, 24),
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Ảnh phòng $name',
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Đóng',
+                              onPressed: viewModel.isLoading
+                                  ? null
+                                  : () => Navigator.of(sheetContext).pop(),
+                              icon: const Icon(Icons.close),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        _RoomCoverPreview(imageUrl: coverImageUrl),
+                        const SizedBox(height: 14),
+                        FilledButton.icon(
+                          onPressed: viewModel.isLoading
+                              ? null
+                              : () => _pickAndUploadImage(sheetContext, roomId),
+                          icon: viewModel.isLoading
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.photo_library_outlined),
+                          label: const Text('Thêm ảnh từ thư viện'),
+                        ),
+                        const SizedBox(height: 18),
+                        if (imageUrls.isEmpty)
+                          const _RoomImageEmptyState()
+                        else
+                          GridView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: imageUrls.length,
+                            gridDelegate:
+                                SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount:
+                                  MediaQuery.of(context).size.width >= 560
+                                      ? 3
+                                      : 2,
+                              mainAxisSpacing: 10,
+                              crossAxisSpacing: 10,
+                              childAspectRatio: 0.78,
+                            ),
+                            itemBuilder: (context, index) {
+                              final imageUrl = imageUrls[index];
+                              return _RoomImageManageTile(
+                                imageUrl: imageUrl,
+                                isCover: imageUrl == coverImageUrl,
+                                onSetCover: viewModel.isLoading
+                                    ? null
+                                    : () => _setCover(sheetContext, roomId, imageUrl),
+                                onDelete: viewModel.isLoading
+                                    ? null
+                                    : () => _confirmDeleteImage(
+                                          sheetContext,
+                                          roomId,
+                                          imageUrl,
+                                        ),
+                              );
+                            },
+                          ),
+                      ],
+                    );
+                  },
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _pickAndUploadImage(BuildContext context, String roomId) async {
+    final result = await viewModel.pickAndUploadRoomImage(
+      buildingId: buildingId,
+      roomId: roomId,
+    );
+
+    if (!context.mounted || result == null) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          result ? 'Đã thêm ảnh phòng.' : _imageErrorMessage(),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _setCover(
+    BuildContext context,
+    String roomId,
+    String imageUrl,
+  ) async {
+    final ok = await viewModel.setCoverImage(
+      buildingId: buildingId,
+      roomId: roomId,
+      imageUrl: imageUrl,
+    );
+
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(ok ? 'Đã đặt ảnh chính.' : _imageErrorMessage())),
+    );
+  }
+
+  Future<void> _confirmDeleteImage(
+    BuildContext context,
+    String roomId,
+    String imageUrl,
+  ) async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Xóa ảnh phòng?'),
+          content: const Text(
+            'Ảnh này sẽ bị xóa khỏi danh sách ảnh của phòng.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Hủy'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Xóa'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldDelete != true) return;
+
+    final ok = await viewModel.deleteRoomImage(
+      buildingId: buildingId,
+      roomId: roomId,
+      imageUrl: imageUrl,
+    );
+
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(ok ? 'Đã xóa ảnh phòng.' : _imageErrorMessage())),
+    );
+  }
+
+  String _imageErrorMessage() {
+    final error = viewModel.errorMessage ?? '';
+    if (error.contains('MissingPluginException')) {
+      return 'Cần dừng app và chạy lại từ đầu sau khi thêm image_picker.';
+    }
+    if (error.contains('CLOUDINARY_CLOUD_NAME')) {
+      return 'Chưa cấu hình Cloudinary cho app.';
+    }
+    if (error.contains('Cloudinary upload failed')) {
+      return 'Cloudinary chưa nhận ảnh. Kiểm tra cloud name hoặc upload preset.';
+    }
+    if (error.contains('permission-denied')) {
+      return 'Firestore chưa cấp quyền lưu link ảnh phòng.';
+    }
+    if (error.contains('TimeoutException')) {
+      return 'Kết nối Cloudinary quá lâu. Kiểm tra mạng rồi thử lại.';
+    }
+    return 'Không xử lý được ảnh phòng.';
   }
 
   static String _statusFromRoom(Map<String, dynamic> room) {
@@ -332,6 +558,221 @@ class _RoomButtonSection extends StatelessWidget {
       'reserved' => Colors.purple,
       _ => Colors.green,
     };
+  }
+
+  static List<String> _imageUrls(Map<String, dynamic> room) {
+    final value = room['imageUrls'];
+    if (value is! List) return const [];
+    return value
+        .map((item) => item.toString().trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+  }
+}
+
+class _RoomImageTile extends StatelessWidget {
+  const _RoomImageTile({
+    required this.roomId,
+    required this.room,
+    required this.onTap,
+  });
+
+  final String roomId;
+  final Map<String, dynamic> room;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = (room['name'] ?? roomId).toString();
+    final coverImageUrl = (room['coverImageUrl'] ?? '').toString();
+    final imageCount = _RoomButtonSection._imageUrls(room).length;
+    final status = _RoomButtonSection._statusFromRoom(room);
+    final color = _RoomButtonSection._statusColor(status);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE5E7EB)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(12),
+                ),
+                child: coverImageUrl.isEmpty
+                    ? const _RoomImagePlaceholder()
+                    : Image.network(
+                        coverImageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) =>
+                            const _RoomImagePlaceholder(),
+                      ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${_RoomButtonSection._statusLabel(status)} - $imageCount ảnh',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: color, fontSize: 12),
+                        ),
+                      ),
+                      const Icon(Icons.add_photo_alternate_outlined, size: 18),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RoomCoverPreview extends StatelessWidget {
+  const _RoomCoverPreview({required this.imageUrl});
+
+  final String imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return AspectRatio(
+      aspectRatio: 16 / 9,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: imageUrl.isEmpty
+            ? const _RoomImagePlaceholder()
+            : Image.network(
+                imageUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const _RoomImagePlaceholder(),
+              ),
+      ),
+    );
+  }
+}
+
+class _RoomImageManageTile extends StatelessWidget {
+  const _RoomImageManageTile({
+    required this.imageUrl,
+    required this.isCover,
+    required this.onSetCover,
+    required this.onDelete,
+  });
+
+  final String imageUrl;
+  final bool isCover;
+  final VoidCallback? onSetCover;
+  final VoidCallback? onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isCover ? Colors.blueAccent : const Color(0xFFE5E7EB),
+          width: isCover ? 2 : 1,
+        ),
+      ),
+      child: Column(
+        children: [
+          Expanded(
+            child: ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+              child: Image.network(
+                imageUrl,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const _RoomImagePlaceholder(),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconButton(
+                  tooltip: 'Đặt làm ảnh chính',
+                  onPressed: isCover ? null : onSetCover,
+                  icon: Icon(
+                    isCover ? Icons.star : Icons.star_border,
+                    color: Colors.blueAccent,
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Xóa ảnh',
+                  onPressed: onDelete,
+                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RoomImagePlaceholder extends StatelessWidget {
+  const _RoomImagePlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: const Color(0xFFEFF6FF),
+      child: const Center(
+        child: Icon(
+          Icons.image_outlined,
+          color: Color(0xFF2563EB),
+          size: 36,
+        ),
+      ),
+    );
+  }
+}
+
+class _RoomImageEmptyState extends StatelessWidget {
+  const _RoomImageEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 28),
+      child: Column(
+        children: [
+          Icon(Icons.photo_library_outlined, size: 48, color: Colors.blueAccent),
+          SizedBox(height: 10),
+          Text(
+            'Phòng này chưa có ảnh. Hãy thêm ảnh từ thư viện điện thoại.',
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
   }
 }
 

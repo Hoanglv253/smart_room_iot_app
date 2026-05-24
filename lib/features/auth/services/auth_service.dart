@@ -5,6 +5,10 @@ import '../../../core/services/app_firestore_service.dart';
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  Stream<User?> authStateChanges() {
+    return _auth.authStateChanges();
+  }
+
   Future<User?> loginWithEmail(String email, String password) async {
     try {
       final credential = await _auth.signInWithEmailAndPassword(

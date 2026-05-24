@@ -1,8 +1,7 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../../../core/services/app_firestore_service.dart';
+import '../view_models/admin_settings_view_model.dart';
 import 'admin_ad_settings_screen.dart';
 
 class AdminSettingsScreen extends StatefulWidget {
@@ -37,6 +36,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   final _bankAccountHolderController = TextEditingController();
   final _transferContentController = TextEditingController();
   final _rulesController = TextEditingController();
+  final _viewModel = AdminSettingsViewModel();
 
   String? _buildingId;
   String? _loadError;
@@ -90,6 +90,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     _bankAccountHolderController.dispose();
     _transferContentController.dispose();
     _rulesController.dispose();
+    _viewModel.dispose();
     super.dispose();
   }
 
@@ -108,103 +109,99 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       _loadError = null;
     });
 
-    try {
-      final query = await AppFirestoreService.buildings
-          .where('adminId', isEqualTo: widget.user.uid)
-          .limit(1)
-          .get();
+    final result = await _viewModel.loadBuilding(widget.user.uid);
 
-      if (query.docs.isNotEmpty) {
-        final doc = query.docs.first;
-        final data = doc.data();
-        final amenities = _readMap(data['amenities']);
-        final joinSettings = _readMap(data['joinSettings']);
-        final displaySettings = _readMap(data['displaySettings']);
-        final paymentSettings = _readMap(data['paymentSettings']);
-
-        _buildingId = doc.id;
-        _setText(_nameController, data['name']);
-        _setText(_addressController, data['address']);
-        _setText(_descriptionController, data['description']);
-        _setText(_phoneController, data['phone']);
-        _setText(_emailController, data['email']);
-        _setText(_floorCountController, data['floorCount']);
-        _setText(_roomsPerFloorController, data['roomsPerFloor']);
-        _setText(_totalRoomsController, data['totalRooms']);
-        _setText(_defaultRentController, data['defaultRent']);
-        _setText(_electricityPriceController, data['electricityPrice']);
-        _setText(_waterPriceController, data['waterPrice']);
-        _setText(_serviceFeeController, data['serviceFee']);
-        _setText(_internetFeeController, data['internetFee']);
-        _setText(_parkingFeeController, data['parkingFee']);
-        _setText(_billCloseDayController, data['billCloseDay']);
-        _setText(_billDueDayController, data['billDueDay']);
-        _setText(_bankNameController, paymentSettings['bankName']);
-        _setText(_bankIdController, paymentSettings['bankId']);
-        _setText(
-          _bankAccountNumberController,
-          paymentSettings['bankAccountNumber'],
-        );
-        _setText(
-          _bankAccountHolderController,
-          paymentSettings['bankAccountHolder'],
-        );
-        _setText(
-          _transferContentController,
-          paymentSettings['transferContentTemplate'],
-        );
-        _setText(_rulesController, data['rulesText']);
-
-        _wifi = _readBool(amenities['wifi'], fallback: _wifi);
-        _elevator = _readBool(amenities['elevator'], fallback: _elevator);
-        _camera = _readBool(amenities['camera'], fallback: _camera);
-        _parking = _readBool(amenities['parking'], fallback: _parking);
-        _laundry = _readBool(amenities['laundry'], fallback: _laundry);
-        _security = _readBool(amenities['security'], fallback: _security);
-
-        _isPublic = _readBool(data['isPublic'], fallback: _isPublic);
-        _allowPreJoinMessage = _readBool(
-          joinSettings['allowPreJoinMessage'],
-          fallback: _allowPreJoinMessage,
-        );
-        _allowTenantJoinRequest = _readBool(
-          joinSettings['allowTenantJoinRequest'],
-          fallback: _allowTenantJoinRequest,
-        );
-        _allowManagerApplication = _readBool(
-          joinSettings['allowManagerApplication'],
-          fallback: _allowManagerApplication,
-        );
-        _requireApproval = _readBool(
-          joinSettings['requireApproval'],
-          fallback: _requireApproval,
-        );
-        _autoJoinGroupChat = _readBool(
-          joinSettings['autoJoinGroupChat'],
-          fallback: _autoJoinGroupChat,
-        );
-        _showAddress = _readBool(
-          displaySettings['showAddress'],
-          fallback: _showAddress,
-        );
-        _showRoomPrice = _readBool(
-          displaySettings['showRoomPrice'],
-          fallback: _showRoomPrice,
-        );
-        _showAvailableRooms = _readBool(
-          displaySettings['showAvailableRooms'],
-          fallback: _showAvailableRooms,
-        );
-      }
-    } on FirebaseException catch (e) {
-      _loadError = e.code == 'permission-denied'
-          ? 'Firestore chua cap quyen doc collection buildings.'
-          : e.message ?? 'Khong tai duoc thiet lap toa nha.';
-    } catch (_) {
-      _loadError = 'Khong tai duoc thiet lap toa nha.';
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+    if (result == null) {
+      _loadError = _settingsErrorMessage(
+        permissionMessage: 'Firestore chua cap quyen doc collection buildings.',
+        fallbackMessage: 'Khong tai duoc thiet lap toa nha.',
+      );
+    } else if (result.buildingId != null) {
+      _fillBuildingForm(result.buildingId!, result.data);
     }
+
+    if (mounted) setState(() => _isLoading = false);
+  }
+
+  void _fillBuildingForm(String buildingId, Map<String, dynamic> data) {
+    final amenities = _readMap(data['amenities']);
+    final joinSettings = _readMap(data['joinSettings']);
+    final displaySettings = _readMap(data['displaySettings']);
+    final paymentSettings = _readMap(data['paymentSettings']);
+
+    _buildingId = buildingId;
+    _setText(_nameController, data['name']);
+    _setText(_addressController, data['address']);
+    _setText(_descriptionController, data['description']);
+    _setText(_phoneController, data['phone']);
+    _setText(_emailController, data['email']);
+    _setText(_floorCountController, data['floorCount']);
+    _setText(_roomsPerFloorController, data['roomsPerFloor']);
+    _setText(_totalRoomsController, data['totalRooms']);
+    _setText(_defaultRentController, data['defaultRent']);
+    _setText(_electricityPriceController, data['electricityPrice']);
+    _setText(_waterPriceController, data['waterPrice']);
+    _setText(_serviceFeeController, data['serviceFee']);
+    _setText(_internetFeeController, data['internetFee']);
+    _setText(_parkingFeeController, data['parkingFee']);
+    _setText(_billCloseDayController, data['billCloseDay']);
+    _setText(_billDueDayController, data['billDueDay']);
+    _setText(_bankNameController, paymentSettings['bankName']);
+    _setText(_bankIdController, paymentSettings['bankId']);
+    _setText(
+      _bankAccountNumberController,
+      paymentSettings['bankAccountNumber'],
+    );
+    _setText(
+      _bankAccountHolderController,
+      paymentSettings['bankAccountHolder'],
+    );
+    _setText(
+      _transferContentController,
+      paymentSettings['transferContentTemplate'],
+    );
+    _setText(_rulesController, data['rulesText']);
+
+    _wifi = _readBool(amenities['wifi'], fallback: _wifi);
+    _elevator = _readBool(amenities['elevator'], fallback: _elevator);
+    _camera = _readBool(amenities['camera'], fallback: _camera);
+    _parking = _readBool(amenities['parking'], fallback: _parking);
+    _laundry = _readBool(amenities['laundry'], fallback: _laundry);
+    _security = _readBool(amenities['security'], fallback: _security);
+
+    _isPublic = _readBool(data['isPublic'], fallback: _isPublic);
+    _allowPreJoinMessage = _readBool(
+      joinSettings['allowPreJoinMessage'],
+      fallback: _allowPreJoinMessage,
+    );
+    _allowTenantJoinRequest = _readBool(
+      joinSettings['allowTenantJoinRequest'],
+      fallback: _allowTenantJoinRequest,
+    );
+    _allowManagerApplication = _readBool(
+      joinSettings['allowManagerApplication'],
+      fallback: _allowManagerApplication,
+    );
+    _requireApproval = _readBool(
+      joinSettings['requireApproval'],
+      fallback: _requireApproval,
+    );
+    _autoJoinGroupChat = _readBool(
+      joinSettings['autoJoinGroupChat'],
+      fallback: _autoJoinGroupChat,
+    );
+    _showAddress = _readBool(
+      displaySettings['showAddress'],
+      fallback: _showAddress,
+    );
+    _showRoomPrice = _readBool(
+      displaySettings['showRoomPrice'],
+      fallback: _showRoomPrice,
+    );
+    _showAvailableRooms = _readBool(
+      displaySettings['showAvailableRooms'],
+      fallback: _showAvailableRooms,
+    );
   }
 
   Future<void> _saveBuilding() async {
@@ -226,199 +223,129 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
 
     setState(() => _isSaving = true);
 
-    try {
-      final isNewBuilding = _buildingId == null;
-      final doc = isNewBuilding
-          ? AppFirestoreService.buildings.doc()
-          : AppFirestoreService.buildings.doc(_buildingId);
+    final result = await _viewModel.saveBuilding(
+      buildingId: _buildingId,
+      data: _buildingData(
+        buildingName: buildingName,
+        floorCount: floorCount,
+        roomsPerFloor: roomsPerFloor,
+        totalRooms: totalRooms,
+        defaultRent: defaultRent,
+      ),
+      userId: widget.user.uid,
+      buildingName: buildingName,
+      totalRooms: totalRooms,
+      floorCount: floorCount,
+      roomsPerFloor: roomsPerFloor,
+      defaultRent: defaultRent,
+      autoJoinGroupChat: _autoJoinGroupChat,
+    );
 
-      await doc.set({
-        'id': doc.id,
-        'adminId': widget.user.uid,
-        'adminName': widget.user.displayName ?? widget.user.email ?? 'Admin',
-        'name': buildingName,
-        'address': _addressController.text.trim(),
-        'description': _descriptionController.text.trim(),
-        'phone': _phoneController.text.trim(),
-        'email': _emailController.text.trim(),
-        'floorCount': floorCount,
-        'roomsPerFloor': roomsPerFloor,
-        'totalRooms': totalRooms,
-        'defaultRent': defaultRent,
-        'electricityPrice': _readInt(_electricityPriceController),
-        'waterPrice': _readInt(_waterPriceController),
-        'serviceFee': _readInt(_serviceFeeController),
-        'internetFee': _readInt(_internetFeeController),
-        'parkingFee': _readInt(_parkingFeeController),
-        'billCloseDay': _readInt(_billCloseDayController),
-        'billDueDay': _readInt(_billDueDayController),
-        'rulesText': _rulesController.text.trim(),
-        'amenities': {
-          'wifi': _wifi,
-          'elevator': _elevator,
-          'camera': _camera,
-          'parking': _parking,
-          'laundry': _laundry,
-          'security': _security,
-        },
-        'isPublic': _isPublic,
-        'joinSettings': {
-          'allowPreJoinMessage': _allowPreJoinMessage,
-          'allowTenantJoinRequest': _allowTenantJoinRequest,
-          'allowManagerApplication': _allowManagerApplication,
-          'requireApproval': _requireApproval,
-          'autoJoinGroupChat': _autoJoinGroupChat,
-        },
-        'displaySettings': {
-          'showAddress': _showAddress,
-          'showRoomPrice': _showRoomPrice,
-          'showAvailableRooms': _showAvailableRooms,
-        },
-        'paymentSettings': {
-          'bankName': _bankNameController.text.trim(),
-          'bankId': _bankIdController.text.trim(),
-          'bankAccountNumber': _bankAccountNumberController.text.trim(),
-          'bankAccountHolder': _bankAccountHolderController.text.trim(),
-          'transferContentTemplate': _transferContentController.text.trim(),
-        },
-        if (isNewBuilding) 'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      _buildingId = doc.id;
+    if (result.buildingId != null) {
+      _buildingId = result.buildingId;
       _totalRoomsController.text = totalRooms.toString();
-
-      try {
-        await _syncRooms(
-          buildingId: doc.id,
-          totalRooms: totalRooms,
-          floorCount: floorCount,
-          roomsPerFloor: roomsPerFloor,
-          defaultRent: defaultRent,
-        );
-      } on FirebaseException catch (e) {
-        _showSnack(
-          e.code == 'permission-denied'
-              ? 'Da luu toa nha, nhung Firestore chua cap quyen ghi buildings/{id}/rooms.'
-              : e.message ?? 'Da luu toa nha, nhung chua dong bo duoc phong.',
-        );
-        return;
-      }
-
-      if (_autoJoinGroupChat) {
-        try {
-          await _ensureBuildingGroupChat(doc.id);
-        } on FirebaseException catch (e) {
-          _showSnack(
-            e.code == 'permission-denied'
-                ? 'Da luu toa nha va phong, nhung Firestore chua cap quyen ghi chats.'
-                : e.message ?? 'Da luu toa nha va phong, nhung chua tao duoc chat.',
-          );
-          return;
-        }
-      }
-
-      _showSnack('Da luu thiet lap va dong bo danh sach phong.');
-    } on FirebaseException catch (e) {
-      _showSnack(
-        e.code == 'permission-denied'
-            ? 'Firestore chua cap quyen ghi buildings/rooms/chats.'
-            : e.message ?? 'Khong luu duoc toa nha.',
-      );
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
     }
+
+    _showSnack(_saveResultMessage(result.status));
+
+    if (mounted) setState(() => _isSaving = false);
   }
 
-  Future<void> _syncRooms({
-    required String buildingId,
-    required int totalRooms,
+  Map<String, dynamic> _buildingData({
+    required String buildingName,
     required int floorCount,
     required int roomsPerFloor,
+    required int totalRooms,
     required int defaultRent,
-  }) async {
-    if (totalRooms <= 0) return;
-
-    final rooms = AppFirestoreService.buildingRooms(buildingId);
-    final effectiveRoomsPerFloor = roomsPerFloor > 0
-        ? roomsPerFloor
-        : (floorCount > 0 ? (totalRooms / floorCount).ceil() : totalRooms);
-
-    var batch = FirebaseFirestore.instance.batch();
-    var operationCount = 0;
-
-    Future<void> commitBatch() async {
-      if (operationCount == 0) return;
-      await batch.commit();
-      batch = FirebaseFirestore.instance.batch();
-      operationCount = 0;
-    }
-
-    for (var index = 1; index <= totalRooms; index++) {
-      final floor = effectiveRoomsPerFloor > 0
-          ? ((index - 1) ~/ effectiveRoomsPerFloor) + 1
-          : 1;
-      final roomInFloor = effectiveRoomsPerFloor > 0
-          ? ((index - 1) % effectiveRoomsPerFloor) + 1
-          : index;
-      final paddedIndex = index.toString().padLeft(3, '0');
-      final roomRef = rooms.doc('room_$paddedIndex');
-
-      batch.set(roomRef, {
-        'id': roomRef.id,
-        'buildingId': buildingId,
-        'roomNumber': index,
-        'floor': floor,
-        'name': 'Phong $floor${roomInFloor.toString().padLeft(2, '0')}',
-        'rent': defaultRent,
-        'type': 'standard',
-        'maxPeople': 0,
-        'area': 0,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      operationCount++;
-      if (operationCount >= 450) {
-        await commitBatch();
-      }
-    }
-
-    await commitBatch();
+  }) {
+    return {
+      'adminId': widget.user.uid,
+      'adminName': widget.user.displayName ?? widget.user.email ?? 'Admin',
+      'name': buildingName,
+      'address': _addressController.text.trim(),
+      'description': _descriptionController.text.trim(),
+      'phone': _phoneController.text.trim(),
+      'email': _emailController.text.trim(),
+      'floorCount': floorCount,
+      'roomsPerFloor': roomsPerFloor,
+      'totalRooms': totalRooms,
+      'defaultRent': defaultRent,
+      'electricityPrice': _readInt(_electricityPriceController),
+      'waterPrice': _readInt(_waterPriceController),
+      'serviceFee': _readInt(_serviceFeeController),
+      'internetFee': _readInt(_internetFeeController),
+      'parkingFee': _readInt(_parkingFeeController),
+      'billCloseDay': _readInt(_billCloseDayController),
+      'billDueDay': _readInt(_billDueDayController),
+      'rulesText': _rulesController.text.trim(),
+      'amenities': {
+        'wifi': _wifi,
+        'elevator': _elevator,
+        'camera': _camera,
+        'parking': _parking,
+        'laundry': _laundry,
+        'security': _security,
+      },
+      'isPublic': _isPublic,
+      'joinSettings': {
+        'allowPreJoinMessage': _allowPreJoinMessage,
+        'allowTenantJoinRequest': _allowTenantJoinRequest,
+        'allowManagerApplication': _allowManagerApplication,
+        'requireApproval': _requireApproval,
+        'autoJoinGroupChat': _autoJoinGroupChat,
+      },
+      'displaySettings': {
+        'showAddress': _showAddress,
+        'showRoomPrice': _showRoomPrice,
+        'showAvailableRooms': _showAvailableRooms,
+      },
+      'paymentSettings': {
+        'bankName': _bankNameController.text.trim(),
+        'bankId': _bankIdController.text.trim(),
+        'bankAccountNumber': _bankAccountNumberController.text.trim(),
+        'bankAccountHolder': _bankAccountHolderController.text.trim(),
+        'transferContentTemplate': _transferContentController.text.trim(),
+      },
+    };
   }
 
-  Future<void> _ensureBuildingGroupChat(String buildingId) async {
-    final query = await AppFirestoreService.chats
-        .where('memberIds', arrayContains: widget.user.uid)
-        .get();
-
-    final matchedChats = query.docs.where((doc) {
-      final chat = doc.data();
-      return chat['type'] == ChatType.group && chat['buildingId'] == buildingId;
-    }).toList();
-
-    if (matchedChats.isNotEmpty) {
-      await matchedChats.first.reference.update({
-        'memberIds': FieldValue.arrayUnion([widget.user.uid]),
-        'deletedFor': FieldValue.arrayRemove([widget.user.uid]),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-      return;
+  String _saveResultMessage(AdminSettingsSaveStatus status) {
+    if (status == AdminSettingsSaveStatus.saved) {
+      return 'Da luu thiet lap va dong bo danh sach phong.';
     }
 
-    await AppFirestoreService.chats.add({
-      'type': ChatType.group,
-      'buildingId': buildingId,
-      'ownerId': widget.user.uid,
-      'title': _nameController.text.trim().isEmpty
-          ? 'Nhom chat toa nha'
-          : _nameController.text.trim(),
-      'memberIds': [widget.user.uid],
-      'deletedFor': [],
-      'isDeleted': false,
-      'lastMessage': '',
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    if (status == AdminSettingsSaveStatus.savedWithoutRooms) {
+      return _settingsErrorMessage(
+        permissionMessage:
+            'Da luu toa nha, nhung Firestore chua cap quyen ghi buildings/{id}/rooms.',
+        fallbackMessage: 'Da luu toa nha, nhung chua dong bo duoc phong.',
+      );
+    }
+
+    if (status == AdminSettingsSaveStatus.savedWithoutChat) {
+      return _settingsErrorMessage(
+        permissionMessage:
+            'Da luu toa nha va phong, nhung Firestore chua cap quyen ghi chats.',
+        fallbackMessage:
+            'Da luu toa nha va phong, nhung chua tao duoc chat.',
+      );
+    }
+
+    return _settingsErrorMessage(
+      permissionMessage: 'Firestore chua cap quyen ghi buildings/rooms/chats.',
+      fallbackMessage: 'Khong luu duoc toa nha.',
+    );
+  }
+
+  String _settingsErrorMessage({
+    required String permissionMessage,
+    required String fallbackMessage,
+  }) {
+    if (_viewModel.errorMessage?.contains('permission-denied') == true) {
+      return permissionMessage;
+    }
+
+    return fallbackMessage;
   }
 
   void _showSnack(String message) {

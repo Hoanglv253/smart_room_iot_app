@@ -1,8 +1,7 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/services/app_firestore_service.dart';
+import '../view_models/admin_user_management_view_model.dart';
 
 class AdminMemberProfileScreen extends StatefulWidget {
   const AdminMemberProfileScreen({
@@ -24,7 +23,13 @@ class AdminMemberProfileScreen extends StatefulWidget {
 }
 
 class _AdminMemberProfileScreenState extends State<AdminMemberProfileScreen> {
-  bool _isRemoving = false;
+  final _viewModel = AdminMemberProfileViewModel();
+
+  @override
+  void dispose() {
+    _viewModel.dispose();
+    super.dispose();
+  }
 
   String get _name {
     return (widget.userData['name'] ??
@@ -54,7 +59,9 @@ class _AdminMemberProfileScreenState extends State<AdminMemberProfileScreen> {
       builder: (context) {
         return AlertDialog(
           title: const Text('Xoa khoi toa nha?'),
-          content: Text('Ban co chac muon xoa $_name khoi ${widget.buildingName}?'),
+          content: Text(
+            'Ban co chac muon xoa $_name khoi ${widget.buildingName}?',
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
@@ -75,80 +82,33 @@ class _AdminMemberProfileScreenState extends State<AdminMemberProfileScreen> {
   }
 
   Future<void> _removeFromBuilding() async {
-    setState(() => _isRemoving = true);
+    final removed = await _viewModel.removeFromBuilding(
+      buildingId: widget.buildingId,
+      userId: widget.userId,
+      roomId: (widget.userData['roomId'] ?? '').toString(),
+    );
 
-    try {
-      await AppFirestoreService.db.runTransaction((transaction) async {
-        final userRef = AppFirestoreService.users.doc(widget.userId);
-        final roomId = (widget.userData['roomId'] ?? '').toString();
-        final roomRef = roomId.isNotEmpty
-            ? AppFirestoreService.buildingRooms(widget.buildingId).doc(roomId)
-            : null;
-        final roomSnapshot =
-            roomRef == null ? null : await transaction.get(roomRef);
-
-        transaction.update(userRef, {
-          'buildingId': null,
-          'roomId': FieldValue.delete(),
-          'roomNumber': FieldValue.delete(),
-          'roomName': FieldValue.delete(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-
-        if (roomRef != null && roomSnapshot?.exists == true) {
-          transaction.update(roomRef, {
-            'tenantId': FieldValue.delete(),
-            'tenantName': FieldValue.delete(),
-            'tenantEmail': FieldValue.delete(),
-            'status': 'available',
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-        }
-      });
-
-      await _removeFromBuildingGroupChat();
-
+    if (removed) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Da xoa tai khoan khoi toa nha.')),
       );
       Navigator.of(context).pop();
-    } on FirebaseException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.code == 'permission-denied'
-                ? 'Firestore chua cap quyen xoa thanh vien khoi toa nha.'
-                : e.message ?? 'Khong xoa duoc thanh vien.',
-          ),
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _isRemoving = false);
+      return;
     }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(_removeErrorMessage())),
+    );
   }
 
-  Future<void> _removeFromBuildingGroupChat() async {
-    final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser == null) return;
+  String _removeErrorMessage() {
+    if (_viewModel.errorMessage?.contains('permission-denied') == true) {
+      return 'Firestore chua cap quyen xoa thanh vien khoi toa nha.';
+    }
 
-    final query = await AppFirestoreService.chats
-        .where('memberIds', arrayContains: currentUser.uid)
-        .get();
-
-    final matchedChats = query.docs.where((doc) {
-      final chat = doc.data();
-      return chat['type'] == ChatType.group &&
-          chat['buildingId'] == widget.buildingId;
-    }).toList();
-
-    if (matchedChats.isEmpty) return;
-
-    await matchedChats.first.reference.update({
-      'memberIds': FieldValue.arrayRemove([widget.userId]),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    return 'Khong xoa duoc thanh vien.';
   }
 
   @override
@@ -194,19 +154,24 @@ class _AdminMemberProfileScreenState extends State<AdminMemberProfileScreen> {
                 style: const TextStyle(color: Colors.black54),
               ),
               const SizedBox(height: 24),
-              FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.redAccent,
-                ),
-                onPressed: _isRemoving ? null : _confirmRemove,
-                icon: _isRemoving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.person_remove_outlined),
-                label: const Text('Xoa khoi toa nha'),
+              AnimatedBuilder(
+                animation: _viewModel,
+                builder: (context, _) {
+                  return FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.redAccent,
+                    ),
+                    onPressed: _viewModel.isLoading ? null : _confirmRemove,
+                    icon: _viewModel.isLoading
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.person_remove_outlined),
+                    label: const Text('Xoa khoi toa nha'),
+                  );
+                },
               ),
             ],
           ),

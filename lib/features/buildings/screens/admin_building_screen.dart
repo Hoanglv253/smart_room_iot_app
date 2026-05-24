@@ -3,10 +3,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/services/app_firestore_service.dart';
+import '../view_models/admin_building_view_model.dart';
 import 'admin_invoice_management_screen.dart';
 import 'admin_room_management_screen.dart';
 
-class AdminBuildingScreen extends StatelessWidget {
+class AdminBuildingScreen extends StatefulWidget {
   const AdminBuildingScreen({
     required this.user,
     required this.onOpenUserManagement,
@@ -18,12 +19,22 @@ class AdminBuildingScreen extends StatelessWidget {
       onOpenUserManagement;
 
   @override
+  State<AdminBuildingScreen> createState() => _AdminBuildingScreenState();
+}
+
+class _AdminBuildingScreenState extends State<AdminBuildingScreen> {
+  final _viewModel = AdminBuildingViewModel();
+
+  @override
+  void dispose() {
+    _viewModel.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: AppFirestoreService.buildings
-          .where('adminId', isEqualTo: user.uid)
-          .limit(1)
-          .snapshots(),
+      stream: _viewModel.adminBuilding(widget.user.uid),
       builder: (context, snapshot) {
         final buildingDoc = snapshot.data?.docs.isNotEmpty == true
             ? snapshot.data!.docs.first
@@ -52,15 +63,23 @@ class AdminBuildingScreen extends StatelessWidget {
             const SizedBox(height: 4),
             Text((building['address'] ?? 'Chưa có địa chỉ').toString()),
             const SizedBox(height: 16),
-            _BuildingStats(buildingId: buildingId, building: building),
+            _BuildingStats(
+              buildingId: buildingId,
+              building: building,
+              viewModel: _viewModel,
+            ),
             const SizedBox(height: 16),
             _AdminActionGrid(
               buildingId: buildingId,
               building: building,
-              onOpenUserManagement: onOpenUserManagement,
+              onOpenUserManagement: widget.onOpenUserManagement,
             ),
             const SizedBox(height: 16),
-            _JoinRequestBoard(buildingId: buildingId, adminId: user.uid),
+            _JoinRequestBoard(
+              buildingId: buildingId,
+              adminId: widget.user.uid,
+              viewModel: _viewModel,
+            ),
           ],
         );
       },
@@ -86,25 +105,28 @@ class _NoBuildingView extends StatelessWidget {
 }
 
 class _BuildingStats extends StatelessWidget {
-  const _BuildingStats({required this.buildingId, required this.building});
+  const _BuildingStats({
+    required this.buildingId,
+    required this.building,
+    required this.viewModel,
+  });
 
   final String buildingId;
   final Map<String, dynamic> building;
+  final AdminBuildingViewModel viewModel;
 
   @override
   Widget build(BuildContext context) {
     final totalRooms = (building['totalRooms'] as num?)?.toInt() ?? 0;
 
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: AppFirestoreService.users
-          .where('buildingId', isEqualTo: buildingId)
-          .snapshots(),
+      stream: viewModel.members(buildingId),
       builder: (context, snapshot) {
-        final tenantCount = (snapshot.data?.docs ?? [])
-            .where((doc) => doc.data()['role'] == UserRole.user)
-            .length;
-        final occupiedRooms = tenantCount.clamp(0, totalRooms);
-        final emptyRooms = (totalRooms - occupiedRooms).clamp(0, totalRooms);
+        final tenantCount = viewModel.tenantCount(snapshot.data?.docs ?? []);
+        final occupiedRooms = tenantCount.clamp(0, totalRooms).toInt();
+        final emptyRooms = (totalRooms - occupiedRooms)
+            .clamp(0, totalRooms)
+            .toInt();
 
         return Row(
           children: [
@@ -336,10 +358,12 @@ class _JoinRequestBoard extends StatelessWidget {
   const _JoinRequestBoard({
     required this.buildingId,
     required this.adminId,
+    required this.viewModel,
   });
 
   final String buildingId;
   final String adminId;
+  final AdminBuildingViewModel viewModel;
 
   @override
   Widget build(BuildContext context) {
@@ -358,10 +382,7 @@ class _JoinRequestBoard extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: AppFirestoreService.joinRequests
-                  .where('buildingId', isEqualTo: buildingId)
-                  .where('status', isEqualTo: JoinRequestStatus.pending)
-                  .snapshots(),
+              stream: viewModel.pendingJoinRequests(buildingId),
               builder: (context, snapshot) {
                 final requests = snapshot.data?.docs ?? [];
                 if (requests.isEmpty) {
@@ -390,7 +411,7 @@ class _JoinRequestBoard extends StatelessWidget {
                           IconButton(
                             tooltip: 'Từ chối',
                             icon: const Icon(Icons.close, color: Colors.red),
-                            onPressed: () => _reject(doc.id),
+                            onPressed: () => _reject(context, doc.id),
                           ),
                         ],
                       ),
@@ -410,94 +431,55 @@ class _JoinRequestBoard extends StatelessWidget {
     String requestId,
     Map<String, dynamic> data,
   ) async {
-    final requesterId = (data['requesterId'] ?? '').toString();
-    if (requesterId.isEmpty) return;
+    final result = await viewModel.approveJoinRequest(
+      requestId: requestId,
+      buildingId: buildingId,
+      adminId: adminId,
+      requestData: data,
+    );
+    if (!context.mounted) return;
 
-    try {
-      await AppFirestoreService.db.runTransaction((transaction) async {
-        transaction.update(AppFirestoreService.joinRequests.doc(requestId), {
-          'status': JoinRequestStatus.approved,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-        transaction.update(AppFirestoreService.users.doc(requesterId), {
-          'buildingId': buildingId,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-      });
-    } on FirebaseException catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.code == 'permission-denied'
-                ? 'Firestore chua cap quyen duyet yeu cau tham gia.'
-                : e.message ?? 'Khong duyet duoc yeu cau.',
-          ),
-        ),
-      );
-      return;
-    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(_approvalMessage(result))),
+    );
+  }
 
-    try {
-      await _ensureGroupChatMember(requesterId, data);
-      if (!context.mounted) return;
+  Future<void> _reject(BuildContext context, String requestId) async {
+    final rejected = await viewModel.rejectJoinRequest(requestId);
+    if (!context.mounted) return;
+
+    if (!rejected) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Da duyet yeu cau tham gia.')),
-      );
-    } on FirebaseException catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.code == 'permission-denied'
-                ? 'Da duyet, nhung Firestore chua cap quyen them vao nhom chat.'
-                : e.message ?? 'Da duyet, nhung chua them duoc vao nhom chat.',
-          ),
-        ),
+        SnackBar(content: Text(_rejectErrorMessage())),
       );
     }
   }
 
-  Future<void> _reject(String requestId) {
-    return AppFirestoreService.joinRequests.doc(requestId).update({
-      'status': JoinRequestStatus.rejected,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-  }
-
-  Future<void> _ensureGroupChatMember(
-    String requesterId,
-    Map<String, dynamic> data,
-  ) async {
-    final query = await AppFirestoreService.chats
-        .where('memberIds', arrayContains: adminId)
-        .get();
-
-    final matchedChats = query.docs.where((doc) {
-      final chat = doc.data();
-      return chat['type'] == ChatType.group && chat['buildingId'] == buildingId;
-    }).toList();
-
-    if (matchedChats.isEmpty) {
-      await AppFirestoreService.chats.add({
-        'type': ChatType.group,
-        'buildingId': buildingId,
-        'ownerId': adminId,
-        'title': (data['buildingName'] ?? 'Nhom chat toa nha').toString(),
-        'memberIds': [adminId, requesterId],
-        'deletedFor': [],
-        'isDeleted': false,
-        'lastMessage': '',
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-      return;
+  String _approvalMessage(JoinRequestApprovalResult result) {
+    if (result == JoinRequestApprovalResult.approved) {
+      return 'Da duyet yeu cau tham gia.';
     }
 
-    await matchedChats.first.reference.update({
-      'memberIds': FieldValue.arrayUnion([requesterId]),
-      'deletedFor': FieldValue.arrayRemove([adminId, requesterId]),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    if (result == JoinRequestApprovalResult.approvedWithoutGroupChat) {
+      if (viewModel.errorMessage?.contains('permission-denied') == true) {
+        return 'Da duyet, nhung Firestore chua cap quyen them vao nhom chat.';
+      }
+
+      return 'Da duyet, nhung chua them duoc vao nhom chat.';
+    }
+
+    if (viewModel.errorMessage?.contains('permission-denied') == true) {
+      return 'Firestore chua cap quyen duyet yeu cau tham gia.';
+    }
+
+    return 'Khong duyet duoc yeu cau.';
+  }
+
+  String _rejectErrorMessage() {
+    if (viewModel.errorMessage?.contains('permission-denied') == true) {
+      return 'Firestore chua cap quyen tu choi yeu cau tham gia.';
+    }
+
+    return 'Khong tu choi duoc yeu cau.';
   }
 }

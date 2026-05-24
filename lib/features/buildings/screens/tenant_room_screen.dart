@@ -2,18 +2,31 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../../../core/services/app_firestore_service.dart';
+import '../view_models/tenant_room_view_model.dart';
 import 'tenant_invoice_screen.dart';
 
-class TenantRoomScreen extends StatelessWidget {
+class TenantRoomScreen extends StatefulWidget {
   const TenantRoomScreen({required this.user, super.key});
 
   final User user;
 
   @override
+  State<TenantRoomScreen> createState() => _TenantRoomScreenState();
+}
+
+class _TenantRoomScreenState extends State<TenantRoomScreen> {
+  final _viewModel = TenantRoomViewModel();
+
+  @override
+  void dispose() {
+    _viewModel.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: AppFirestoreService.users.doc(user.uid).snapshots(),
+      stream: _viewModel.userProfile(widget.user.uid),
       builder: (context, userSnapshot) {
         if (userSnapshot.hasError) {
           return const _RoomEmptyView(
@@ -45,9 +58,10 @@ class TenantRoomScreen extends StatelessWidget {
         }
 
         return _TenantRoomDetail(
-          user: user,
+          user: widget.user,
           buildingId: buildingId,
           roomId: roomId,
+          viewModel: _viewModel,
         );
       },
     );
@@ -59,16 +73,18 @@ class _TenantRoomDetail extends StatelessWidget {
     required this.user,
     required this.buildingId,
     required this.roomId,
+    required this.viewModel,
   });
 
   final User user;
   final String buildingId;
   final String roomId;
+  final TenantRoomViewModel viewModel;
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: AppFirestoreService.buildings.doc(buildingId).snapshots(),
+      stream: viewModel.building(buildingId),
       builder: (context, buildingSnapshot) {
         if (buildingSnapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -85,9 +101,7 @@ class _TenantRoomDetail extends StatelessWidget {
         final building = buildingSnapshot.data!.data() ?? {};
 
         return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-          stream: AppFirestoreService.buildingRooms(buildingId)
-              .doc(roomId)
-              .snapshots(),
+          stream: viewModel.room(buildingId: buildingId, roomId: roomId),
           builder: (context, roomSnapshot) {
             if (roomSnapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
@@ -257,7 +271,7 @@ class _RoomDashboard extends StatelessWidget {
   }
 }
 
-class _TenantRoomInfoScreen extends StatelessWidget {
+class _TenantRoomInfoScreen extends StatefulWidget {
   const _TenantRoomInfoScreen({
     required this.buildingId,
     required this.roomId,
@@ -269,13 +283,27 @@ class _TenantRoomInfoScreen extends StatelessWidget {
   final Map<String, dynamic> building;
 
   @override
+  State<_TenantRoomInfoScreen> createState() => _TenantRoomInfoScreenState();
+}
+
+class _TenantRoomInfoScreenState extends State<_TenantRoomInfoScreen> {
+  final _viewModel = TenantRoomViewModel();
+
+  @override
+  void dispose() {
+    _viewModel.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Thong tin phong')),
       body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        stream: AppFirestoreService.buildingRooms(buildingId)
-            .doc(roomId)
-            .snapshots(),
+        stream: _viewModel.room(
+          buildingId: widget.buildingId,
+          roomId: widget.roomId,
+        ),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return const _RoomEmptyView(
@@ -302,14 +330,17 @@ class _TenantRoomInfoScreen extends StatelessWidget {
           final area = _readInt(room['area']);
           final maxPeople = _readInt(room['maxPeople']);
           final roomRent = _readInt(room['rent']);
-          final defaultRent = _readInt(building['defaultRent']);
+          final defaultRent = _readInt(widget.building['defaultRent']);
           final rent = roomRent > 0 ? roomRent : defaultRent;
           final type = _text(room['type'], 'standard');
-          final status = _statusLabel((room['status'] ?? 'occupied').toString());
+          final status = _statusLabel(
+            (room['status'] ?? 'occupied').toString(),
+          );
           final tenantName = _text(room['tenantName'], 'Chua co');
           final tenantEmail = _text(room['tenantEmail'], 'Chua co email');
-          final buildingName = _text(building['name'], 'Toa nha');
-          final buildingAddress = _text(building['address'], 'Chua co dia chi');
+          final buildingName = _text(widget.building['name'], 'Toa nha');
+          final buildingAddress =
+              _text(widget.building['address'], 'Chua co dia chi');
 
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -325,7 +356,7 @@ class _TenantRoomInfoScreen extends StatelessWidget {
                 children: [
                   _InfoRow(
                     label: 'So phong',
-                    value: roomNumber > 0 ? '$roomNumber' : roomId,
+                    value: roomNumber > 0 ? '$roomNumber' : widget.roomId,
                   ),
                   _InfoRow(label: 'Ten phong', value: roomName),
                   _InfoRow(label: 'Tang', value: floor),
@@ -335,7 +366,9 @@ class _TenantRoomInfoScreen extends StatelessWidget {
                   ),
                   _InfoRow(
                     label: 'So nguoi toi da',
-                    value: maxPeople > 0 ? '$maxPeople nguoi' : 'Chua thiet lap',
+                    value: maxPeople > 0
+                        ? '$maxPeople nguoi'
+                        : 'Chua thiet lap',
                   ),
                   _InfoRow(label: 'Loai phong', value: type),
                   _InfoRow(label: 'Trang thai', value: status),
@@ -347,7 +380,9 @@ class _TenantRoomInfoScreen extends StatelessWidget {
                 children: [
                   _InfoRow(
                     label: 'Tien thue',
-                    value: rent > 0 ? '${_money(rent)}/thang' : 'Chua thiet lap',
+                    value: rent > 0
+                        ? '${_money(rent)}/thang'
+                        : 'Chua thiet lap',
                   ),
                 ],
               ),

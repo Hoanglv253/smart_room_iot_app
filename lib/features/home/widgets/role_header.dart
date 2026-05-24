@@ -27,6 +27,8 @@ class RoleHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final photoUrl = user.photoURL?.trim() ?? '';
+
     return InkWell(
       borderRadius: BorderRadius.circular(28),
       onTap: () {
@@ -49,14 +51,17 @@ class RoleHeader extends StatelessWidget {
             CircleAvatar(
               radius: 18,
               backgroundColor: avatarColor,
-              child: Text(
-                avatarText,
-                style: TextStyle(
-                  color: avatarTextColor,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              backgroundImage: photoUrl.isEmpty ? null : NetworkImage(photoUrl),
+              child: photoUrl.isEmpty
+                  ? Text(
+                      avatarText,
+                      style: TextStyle(
+                        color: avatarTextColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    )
+                  : null,
             ),
             const SizedBox(width: 10),
             Expanded(

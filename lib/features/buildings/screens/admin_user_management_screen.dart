@@ -2,9 +2,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/services/app_firestore_service.dart';
+import '../view_models/admin_user_management_view_model.dart';
 import 'admin_member_profile_screen.dart';
 
-class AdminUserManagementScreen extends StatelessWidget {
+class AdminUserManagementScreen extends StatefulWidget {
   const AdminUserManagementScreen({
     required this.buildingId,
     required this.buildingName,
@@ -15,13 +16,25 @@ class AdminUserManagementScreen extends StatelessWidget {
   final String buildingName;
 
   @override
+  State<AdminUserManagementScreen> createState() =>
+      _AdminUserManagementScreenState();
+}
+
+class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
+  final _viewModel = AdminUserManagementViewModel();
+
+  @override
+  void dispose() {
+    _viewModel.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Quan ly nguoi dung')),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: AppFirestoreService.users
-            .where('buildingId', isEqualTo: buildingId)
-            .snapshots(),
+        stream: _viewModel.members(widget.buildingId),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return const Center(
@@ -46,7 +59,7 @@ class AdminUserManagementScreen extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text(
-                  'Chua co tai khoan nao tham gia $buildingName.',
+                  'Chua co tai khoan nao tham gia ${widget.buildingName}.',
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -56,7 +69,7 @@ class AdminUserManagementScreen extends StatelessWidget {
           return ListView.separated(
             padding: const EdgeInsets.all(16),
             itemCount: users.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 8),
+            separatorBuilder: (context, index) => const SizedBox(height: 8),
             itemBuilder: (context, index) {
               final data = users[index].data();
               final userId = users[index].id;
@@ -78,8 +91,8 @@ class AdminUserManagementScreen extends StatelessWidget {
                         builder: (_) => AdminMemberProfileScreen(
                           userId: userId,
                           userData: data,
-                          buildingId: buildingId,
-                          buildingName: buildingName,
+                          buildingId: widget.buildingId,
+                          buildingName: widget.buildingName,
                         ),
                       ),
                     );

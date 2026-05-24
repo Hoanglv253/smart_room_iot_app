@@ -2,20 +2,33 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../../../core/services/app_firestore_service.dart';
 import 'admin_room_management_screen.dart';
 import 'admin_invoice_management_screen.dart';
 import 'admin_user_management_screen.dart';
+import '../view_models/manager_building_view_model.dart';
 
-class ManagerBuildingScreen extends StatelessWidget {
+class ManagerBuildingScreen extends StatefulWidget {
   const ManagerBuildingScreen({required this.user, super.key});
 
   final User user;
 
   @override
+  State<ManagerBuildingScreen> createState() => _ManagerBuildingScreenState();
+}
+
+class _ManagerBuildingScreenState extends State<ManagerBuildingScreen> {
+  final _viewModel = ManagerBuildingViewModel();
+
+  @override
+  void dispose() {
+    _viewModel.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: AppFirestoreService.users.doc(user.uid).snapshots(),
+      stream: _viewModel.userProfile(widget.user.uid),
       builder: (context, userSnapshot) {
         if (userSnapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -28,7 +41,7 @@ class ManagerBuildingScreen extends StatelessWidget {
         }
 
         return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-          stream: AppFirestoreService.buildings.doc(buildingId).snapshots(),
+          stream: _viewModel.building(buildingId),
           builder: (context, buildingSnapshot) {
             if (buildingSnapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
@@ -55,6 +68,7 @@ class ManagerBuildingScreen extends StatelessWidget {
                 _ManagerBuildingStats(
                   buildingId: buildingId,
                   building: building,
+                  viewModel: _viewModel,
                 ),
                 const SizedBox(height: 16),
                 _ManagerActionGrid(
@@ -74,23 +88,21 @@ class _ManagerBuildingStats extends StatelessWidget {
   const _ManagerBuildingStats({
     required this.buildingId,
     required this.building,
+    required this.viewModel,
   });
 
   final String buildingId;
   final Map<String, dynamic> building;
+  final ManagerBuildingViewModel viewModel;
 
   @override
   Widget build(BuildContext context) {
     final totalRooms = (building['totalRooms'] as num?)?.toInt() ?? 0;
 
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: AppFirestoreService.users
-          .where('buildingId', isEqualTo: buildingId)
-          .snapshots(),
+      stream: viewModel.members(buildingId),
       builder: (context, snapshot) {
-        final tenantCount = (snapshot.data?.docs ?? [])
-            .where((doc) => doc.data()['role'] == UserRole.user)
-            .length;
+        final tenantCount = viewModel.tenantCount(snapshot.data?.docs ?? []);
         final occupiedRooms = tenantCount.clamp(0, totalRooms).toInt();
         final emptyRooms = (totalRooms - occupiedRooms)
             .clamp(0, totalRooms)
