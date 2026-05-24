@@ -3,22 +3,40 @@ import 'package:flutter/material.dart';
 
 import '../../../core/services/app_firestore_service.dart';
 import '../../auth/screens/login_screen.dart';
-import '../../auth/services/auth_service.dart';
+import '../view_models/home_view_model.dart';
 import 'admin_home_screen.dart';
 import 'manager_home_screen.dart';
 import 'tenant_home_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({required this.user, super.key});
 
   final User user;
 
   @override
-  Widget build(BuildContext context) {
-    final authService = AuthService();
+  State<HomeScreen> createState() => _HomeScreenState();
+}
 
+class _HomeScreenState extends State<HomeScreen> {
+  final _viewModel = HomeViewModel();
+  late final Future<String> _roleFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _roleFuture = _viewModel.loadRole(widget.user.uid);
+  }
+
+  @override
+  void dispose() {
+    _viewModel.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return FutureBuilder<String>(
-      future: authService.getUserRole(user.uid),
+      future: _roleFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
@@ -26,26 +44,29 @@ class HomeScreen extends StatelessWidget {
           );
         }
 
-        final role = snapshot.data ?? UserRole.user;
-        Future<void> onLogout(BuildContext context) {
-          return _logout(context, authService);
-        }
+        final role = snapshot.data ?? _viewModel.fallbackRole();
 
         return switch (role) {
-          UserRole.admin => AdminHomeScreen(user: user, onLogout: onLogout),
-          UserRole.manager => ManagerHomeScreen(user: user, onLogout: onLogout),
+          UserRole.admin => AdminHomeScreen(
+              user: widget.user,
+              onLogout: _logout,
+            ),
+          UserRole.manager => ManagerHomeScreen(
+              user: widget.user,
+              onLogout: _logout,
+            ),
           _ => TenantHomeScreen(
-              user: user,
+              user: widget.user,
               role: role,
-              onLogout: onLogout,
+              onLogout: _logout,
             ),
         };
       },
     );
   }
 
-  Future<void> _logout(BuildContext context, AuthService authService) async {
-    await authService.logout();
+  Future<void> _logout(BuildContext context) async {
+    await _viewModel.logout();
     if (!context.mounted) return;
 
     Navigator.of(context).pushAndRemoveUntil(

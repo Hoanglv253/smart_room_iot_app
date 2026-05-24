@@ -3,11 +3,17 @@ import dotenv from 'dotenv';
 import express from 'express';
 import admin from 'firebase-admin';
 import PayOS from '@payos/node';
+import { onRequest } from 'firebase-functions/v2/https';
+import { defineSecret } from 'firebase-functions/params';
 
 dotenv.config();
 
 const app = express();
 const port = Number(process.env.PORT || 8080);
+
+const PAYOS_CLIENT_ID = defineSecret('PAYOS_CLIENT_ID');
+const PAYOS_API_KEY = defineSecret('PAYOS_API_KEY');
+const PAYOS_CHECKSUM_KEY = defineSecret('PAYOS_CHECKSUM_KEY');
 
 const INVOICE_STATUS = {
   unpaid: 'unpaid',
@@ -15,6 +21,13 @@ const INVOICE_STATUS = {
   pending: 'pending',
   paid: 'paid',
   cancelled: 'cancelled',
+};
+
+const PAYOS_STATUS = {
+  paid: 'PAID',
+  pending: 'PENDING',
+  cancelled: 'CANCELLED',
+  expired: 'EXPIRED',
 };
 
 app.use(cors({ origin: true }));
@@ -48,8 +61,27 @@ function initializeFirebase() {
   });
 }
 
+function envValue(name) {
+  const directValue = process.env[name];
+  if (directValue) return directValue;
+
+  const secret = {
+    PAYOS_CLIENT_ID,
+    PAYOS_API_KEY,
+    PAYOS_CHECKSUM_KEY,
+  }[name];
+
+  if (!secret) return '';
+
+  try {
+    return secret.value();
+  } catch (_error) {
+    return '';
+  }
+}
+
 function requireEnv(name) {
-  const value = process.env[name];
+  const value = envValue(name);
   if (!value) {
     throw new Error(`Missing environment variable ${name}`);
   }
@@ -59,14 +91,29 @@ function requireEnv(name) {
 initializeFirebase();
 
 const db = admin.firestore();
-const payos = new PayOS(
-  requireEnv('PAYOS_CLIENT_ID'),
-  requireEnv('PAYOS_API_KEY'),
-  requireEnv('PAYOS_CHECKSUM_KEY'),
-);
+let payosInstance = null;
 
-function appBaseUrl() {
-  return process.env.APP_PUBLIC_URL || 'https://smart-room-iot-353c5.web.app';
+function payosClient() {
+  if (payosInstance) return payosInstance;
+
+  payosInstance = new PayOS(
+    requireEnv('PAYOS_CLIENT_ID'),
+    requireEnv('PAYOS_API_KEY'),
+    requireEnv('PAYOS_CHECKSUM_KEY'),
+  );
+  return payosInstance;
+}
+
+function appBaseUrl(request) {
+  if (process.env.APP_PUBLIC_URL) return process.env.APP_PUBLIC_URL;
+
+  const host = request?.get?.('x-forwarded-host') || request?.get?.('host');
+  if (host && /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:\d+)?$/.test(host)) {
+    const protocol = request?.get?.('x-forwarded-proto') || request?.protocol || 'https';
+    return `${protocol}://${host}`;
+  }
+
+  return 'https://asia-southeast1-smart-room-iot-353c5.cloudfunctions.net/api';
 }
 
 function readString(value) {
@@ -88,6 +135,72 @@ function buildOrderCode() {
 
 function shortDescription(orderCode) {
   return `HD${String(orderCode).slice(-7)}`;
+}
+
+function invoiceRef(buildingId, invoiceId) {
+  return db.collection('buildings').doc(buildingId).collection('invoices').doc(invoiceId);
+}
+
+function paymentRef(orderCode) {
+  return db.collection('payosPayments').doc(String(orderCode));
+}
+
+function isSuccessfulPayosWebhook(requestBody, webhookData) {
+  return (
+    requestBody?.success === true &&
+    readString(requestBody?.code) === '00' &&
+    readString(webhookData?.code) === '00'
+  );
+}
+
+function isPaidPayosInformation(paymentInfo, invoiceAmount) {
+  const status = readString(paymentInfo?.status).toUpperCase();
+  const amountPaid = readInt(paymentInfo?.amountPaid);
+  const amountRemaining = readInt(paymentInfo?.amountRemaining);
+
+  return (
+    status === PAYOS_STATUS.paid ||
+    (invoiceAmount > 0 && amountPaid >= invoiceAmount) ||
+    (invoiceAmount > 0 && amountRemaining === 0 && amountPaid > 0)
+  );
+}
+
+function paymentResultPage(title, message) {
+  return `<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>${title}</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        font-family: Arial, sans-serif;
+        background: #f4f7fb;
+        color: #172033;
+      }
+      main {
+        width: min(420px, calc(100vw - 32px));
+        padding: 28px;
+        border-radius: 16px;
+        background: #fff;
+        box-shadow: 0 12px 40px rgba(15, 23, 42, 0.12);
+        text-align: center;
+      }
+      h1 { margin: 0 0 12px; font-size: 24px; }
+      p { margin: 0; line-height: 1.5; color: #4b5563; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>${title}</h1>
+      <p>${message}</p>
+    </main>
+  </body>
+</html>`;
 }
 
 async function verifyFirebaseUser(request) {
@@ -124,18 +237,129 @@ function ensurePayable(invoice) {
 }
 
 function sendError(response, error) {
-  console.error(error);
+  if ((error.status || 500) >= 500) {
+    console.error(error);
+  } else {
+    console.warn(error.message || 'Request error');
+  }
   response.status(error.status || 500).json({
     message: error.message || 'Server error',
   });
 }
 
-app.get('/health', (_request, response) => {
-  response.json({ ok: true });
+async function syncPayosPaymentStatus(orderCode) {
+  const targetPaymentRef = paymentRef(orderCode);
+  const paymentSnap = await targetPaymentRef.get();
+
+  if (!paymentSnap.exists) {
+    return { synced: false, reason: 'payment_not_found' };
+  }
+
+  const payment = paymentSnap.data();
+  const targetInvoiceRef = invoiceRef(payment.buildingId, payment.invoiceId);
+  const invoiceSnap = await targetInvoiceRef.get();
+
+  if (!invoiceSnap.exists) {
+    return { synced: false, reason: 'invoice_not_found' };
+  }
+
+  const invoice = invoiceSnap.data();
+  const invoiceAmount = readInt(invoice.totalAmount);
+  const paymentInfo = await payosClient().getPaymentLinkInformation(orderCode);
+  const amountPaid = readInt(paymentInfo.amountPaid);
+  const paymentStatus = readString(paymentInfo.status).toUpperCase();
+
+  if (!isPaidPayosInformation(paymentInfo, invoiceAmount)) {
+    await targetPaymentRef.update({
+      payosStatus: paymentStatus || PAYOS_STATUS.pending,
+      lastSyncedInfo: paymentInfo,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return { synced: false, reason: paymentStatus || 'not_paid' };
+  }
+
+  const isAmountMismatch =
+    amountPaid > 0 && invoiceAmount > 0 && amountPaid !== invoiceAmount;
+
+  await db.runTransaction(async (transaction) => {
+    if (isAmountMismatch) {
+      transaction.update(targetInvoiceRef, {
+        status: INVOICE_STATUS.pending,
+        paymentProvider: 'payos',
+        paymentMethod: 'payos',
+        paymentNote: `PayOS bao da nhan ${amountPaid}, hoa don ${invoiceAmount}. Can kiem tra lai.`,
+        'payos.lastSyncedInfo': paymentInfo,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      transaction.update(targetPaymentRef, {
+        status: INVOICE_STATUS.pending,
+        payosStatus: paymentStatus,
+        lastSyncedInfo: paymentInfo,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      return;
+    }
+
+    transaction.update(targetInvoiceRef, {
+      status: INVOICE_STATUS.paid,
+      paymentProvider: 'payos',
+      paymentMethod: 'payos',
+      paidAt: admin.firestore.FieldValue.serverTimestamp(),
+      paymentConfirmedAt: admin.firestore.FieldValue.serverTimestamp(),
+      paymentNote: 'PayOS da xac nhan thanh toan.',
+      'payos.lastSyncedInfo': paymentInfo,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    transaction.update(targetPaymentRef, {
+      status: INVOICE_STATUS.paid,
+      payosStatus: paymentStatus,
+      lastSyncedInfo: paymentInfo,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+
+  return {
+    synced: true,
+    amountMismatch: isAmountMismatch,
+    status: paymentStatus,
+  };
+}
+
+app.get('/', (_request, response) => {
+  response.json({
+    ok: true,
+    service: 'Smart Room PayOS backend',
+    health: '/health',
+  });
+});
+
+app.get('/health', (request, response) => {
+  response.json({
+    ok: true,
+    webhookUrl: `${appBaseUrl(request)}/payos-webhook`,
+    payosConfigured: Boolean(
+      envValue('PAYOS_CLIENT_ID') &&
+        envValue('PAYOS_API_KEY') &&
+        envValue('PAYOS_CHECKSUM_KEY'),
+    ),
+    firebaseConfigured: Boolean(
+      process.env.FIREBASE_SERVICE_ACCOUNT_JSON ||
+        process.env.FIREBASE_SERVICE_ACCOUNT_BASE64 ||
+        process.env.GOOGLE_APPLICATION_CREDENTIALS ||
+        process.env.FUNCTION_TARGET ||
+        process.env.K_SERVICE,
+    ),
+  });
 });
 
 app.post('/create-payos-payment', async (request, response) => {
   try {
+    console.log('POST /create-payos-payment', {
+      hasAuthorization: Boolean(request.headers.authorization),
+      buildingId: readString(request.body?.buildingId),
+      invoiceId: readString(request.body?.invoiceId),
+    });
+
     const decodedToken = await verifyFirebaseUser(request);
     const buildingId = readString(request.body?.buildingId);
     const invoiceId = readString(request.body?.invoiceId);
@@ -145,12 +369,8 @@ app.post('/create-payos-payment', async (request, response) => {
       return;
     }
 
-    const invoiceRef = db
-      .collection('buildings')
-      .doc(buildingId)
-      .collection('invoices')
-      .doc(invoiceId);
-    const invoiceSnap = await invoiceRef.get();
+    const targetInvoiceRef = invoiceRef(buildingId, invoiceId);
+    const invoiceSnap = await targetInvoiceRef.get();
 
     if (!invoiceSnap.exists) {
       response.status(404).json({ message: 'Khong tim thay hoa don.' });
@@ -179,10 +399,11 @@ app.post('/create-payos-payment', async (request, response) => {
 
     const orderCode = buildOrderCode();
     const description = shortDescription(orderCode);
-    const returnUrl = `${appBaseUrl()}/payment/success?buildingId=${buildingId}&invoiceId=${invoiceId}`;
-    const cancelUrl = `${appBaseUrl()}/payment/cancel?buildingId=${buildingId}&invoiceId=${invoiceId}`;
+    const baseUrl = appBaseUrl(request);
+    const returnUrl = `${baseUrl}/payment/success?buildingId=${buildingId}&invoiceId=${invoiceId}`;
+    const cancelUrl = `${baseUrl}/payment/cancel?buildingId=${buildingId}&invoiceId=${invoiceId}`;
 
-    const paymentLink = await payos.createPaymentLink({
+    const paymentLink = await payosClient().createPaymentLink({
       orderCode,
       amount,
       description,
@@ -200,7 +421,7 @@ app.post('/create-payos-payment', async (request, response) => {
     });
 
     await db.runTransaction(async (transaction) => {
-      transaction.update(invoiceRef, {
+      transaction.update(targetInvoiceRef, {
         status: INVOICE_STATUS.waitingPayment,
         paymentProvider: 'payos',
         payos: {
@@ -214,7 +435,7 @@ app.post('/create-payos-payment', async (request, response) => {
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
-      transaction.set(db.collection('payosPayments').doc(String(orderCode)), {
+      transaction.set(paymentRef(orderCode), {
         orderCode,
         buildingId,
         invoiceId,
@@ -238,11 +459,62 @@ app.post('/create-payos-payment', async (request, response) => {
   }
 });
 
+app.get('/payment/success', async (request, response) => {
+  try {
+    let orderCode = readInt(request.query?.orderCode);
+    if (!orderCode) {
+      const buildingId = readString(request.query?.buildingId);
+      const invoiceId = readString(request.query?.invoiceId);
+      if (buildingId && invoiceId) {
+        const invoiceSnap = await invoiceRef(buildingId, invoiceId).get();
+        orderCode = readInt(invoiceSnap.data()?.payos?.orderCode);
+      }
+    }
+
+    if (orderCode) {
+      await syncPayosPaymentStatus(orderCode);
+    }
+
+    response
+      .status(200)
+      .type('html')
+      .send(
+        paymentResultPage(
+          'Thanh toan dang duoc xac nhan',
+          'Ban co the quay lai ung dung. Hoa don se tu cap nhat khi PayOS xac nhan giao dich.',
+        ),
+      );
+  } catch (error) {
+    console.error('Payment success sync failed', error);
+    response
+      .status(200)
+      .type('html')
+      .send(
+        paymentResultPage(
+          'Da nhan ket qua thanh toan',
+          'Ban co the quay lai ung dung. Neu hoa don chua doi trang thai, hay cho them mot chut de webhook PayOS cap nhat.',
+        ),
+      );
+  }
+});
+
+app.get('/payment/cancel', (_request, response) => {
+  response
+    .status(200)
+    .type('html')
+    .send(
+      paymentResultPage(
+        'Thanh toan da huy',
+        'Hoa don van giu trang thai chua thanh toan. Ban co the quay lai ung dung de thanh toan lai.',
+      ),
+    );
+});
+
 app.post('/payos-webhook', async (request, response) => {
   let webhookData;
 
   try {
-    webhookData = payos.verifyPaymentWebhookData(request.body);
+    webhookData = payosClient().verifyPaymentWebhookData(request.body);
   } catch (error) {
     console.error('Invalid PayOS webhook', error);
     response.status(400).send('Invalid webhook');
@@ -263,8 +535,8 @@ app.post('/payos-webhook', async (request, response) => {
     return;
   }
 
-  const paymentRef = db.collection('payosPayments').doc(String(orderCode));
-  const paymentSnap = await paymentRef.get();
+  const targetPaymentRef = paymentRef(orderCode);
+  const paymentSnap = await targetPaymentRef.get();
 
   if (!paymentSnap.exists) {
     console.warn('PayOS payment not found', { orderCode });
@@ -272,13 +544,20 @@ app.post('/payos-webhook', async (request, response) => {
     return;
   }
 
+  if (!isSuccessfulPayosWebhook(request.body, webhookData)) {
+    await targetPaymentRef.update({
+      status: INVOICE_STATUS.waitingPayment,
+      lastWebhook: webhookData,
+      lastWebhookAccepted: false,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    response.status(200).send('Webhook ignored');
+    return;
+  }
+
   const payment = paymentSnap.data();
-  const invoiceRef = db
-    .collection('buildings')
-    .doc(payment.buildingId)
-    .collection('invoices')
-    .doc(payment.invoiceId);
-  const invoiceSnap = await invoiceRef.get();
+  const targetInvoiceRef = invoiceRef(payment.buildingId, payment.invoiceId);
+  const invoiceSnap = await targetInvoiceRef.get();
 
   if (!invoiceSnap.exists) {
     response.status(200).send('Invoice not found');
@@ -291,7 +570,7 @@ app.post('/payos-webhook', async (request, response) => {
 
   await db.runTransaction(async (transaction) => {
     if (isAmountMismatch) {
-      transaction.update(invoiceRef, {
+      transaction.update(targetInvoiceRef, {
         status: INVOICE_STATUS.pending,
         paymentProvider: 'payos',
         paymentMethod: 'payos',
@@ -300,15 +579,16 @@ app.post('/payos-webhook', async (request, response) => {
         'payos.paymentLinkId': paymentLinkId || invoice.payos?.paymentLinkId || '',
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
-      transaction.update(paymentRef, {
+      transaction.update(targetPaymentRef, {
         status: INVOICE_STATUS.pending,
         lastWebhook: webhookData,
+        lastWebhookAccepted: true,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
       return;
     }
 
-    transaction.update(invoiceRef, {
+    transaction.update(targetInvoiceRef, {
       status: INVOICE_STATUS.paid,
       paymentProvider: 'payos',
       paymentMethod: 'payos',
@@ -323,11 +603,12 @@ app.post('/payos-webhook', async (request, response) => {
       'payos.paymentLinkId': paymentLinkId || invoice.payos?.paymentLinkId || '',
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
-    transaction.update(paymentRef, {
+    transaction.update(targetPaymentRef, {
       status: INVOICE_STATUS.paid,
       reference: readString(webhookData.reference),
       transactionDateTime: readString(webhookData.transactionDateTime),
       lastWebhook: webhookData,
+      lastWebhookAccepted: true,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
   });
@@ -335,6 +616,16 @@ app.post('/payos-webhook', async (request, response) => {
   response.status(200).send(isAmountMismatch ? 'Amount mismatch' : 'OK');
 });
 
-app.listen(port, () => {
-  console.log(`PayOS backend listening on port ${port}`);
-});
+export const api = onRequest(
+  {
+    region: 'asia-southeast1',
+    secrets: [PAYOS_CLIENT_ID, PAYOS_API_KEY, PAYOS_CHECKSUM_KEY],
+  },
+  app,
+);
+
+if (!process.env.FUNCTION_TARGET && !process.env.K_SERVICE) {
+  app.listen(port, () => {
+    console.log(`PayOS backend listening on port ${port}`);
+  });
+}

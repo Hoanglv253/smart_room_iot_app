@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../../../core/services/app_firestore_service.dart';
+import '../view_models/chat_detail_view_model.dart';
 
 class ChatDetailScreen extends StatefulWidget {
   const ChatDetailScreen({
@@ -22,52 +22,34 @@ class ChatDetailScreen extends StatefulWidget {
 
 class _ChatDetailScreenState extends State<ChatDetailScreen> {
   final _messageController = TextEditingController();
-  bool _isSending = false;
+  final _viewModel = ChatDetailViewModel();
 
   @override
   void dispose() {
     _messageController.dispose();
+    _viewModel.dispose();
     super.dispose();
   }
 
   Future<void> _sendMessage() async {
-    final text = _messageController.text.trim();
-    if (text.isEmpty || _isSending) return;
+    final sent = await _viewModel.sendMessage(
+      chatId: widget.chatId,
+      user: widget.user,
+      text: _messageController.text,
+    );
 
-    setState(() => _isSending = true);
+    if (!mounted) return;
 
-    try {
-      final senderName =
-          widget.user.displayName ?? widget.user.email ?? 'Nguoi dung';
-
-      await AppFirestoreService.chatMessages(widget.chatId).add({
-        'senderId': widget.user.uid,
-        'senderName': senderName,
-        'senderEmail': widget.user.email ?? '',
-        'text': text,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      await AppFirestoreService.chats.doc(widget.chatId).update({
-        'lastMessage': text,
-        'lastSenderId': widget.user.uid,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
+    if (sent) {
       _messageController.clear();
-    } on FirebaseException catch (e) {
-      if (!mounted) return;
+      return;
+    }
+
+    final message = _sendErrorMessage(_viewModel.errorMessage);
+    if (message != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.code == 'permission-denied'
-                ? 'Firestore chua cap quyen gui tin nhan.'
-                : e.message ?? 'Khong gui duoc tin nhan.',
-          ),
-        ),
+        SnackBar(content: Text(message)),
       );
-    } finally {
-      if (mounted) setState(() => _isSending = false);
     }
   }
 
@@ -79,9 +61,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         children: [
           Expanded(
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: AppFirestoreService.chatMessages(widget.chatId)
-                  .orderBy('createdAt', descending: true)
-                  .snapshots(),
+              stream: _viewModel.messages(widget.chatId),
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
                   return const Center(
@@ -139,15 +119,22 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  IconButton.filled(
-                    onPressed: _isSending ? null : _sendMessage,
-                    icon: _isSending
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.send),
+                  AnimatedBuilder(
+                    animation: _viewModel,
+                    builder: (context, _) {
+                      return IconButton.filled(
+                        onPressed: _viewModel.isLoading ? null : _sendMessage,
+                        icon: _viewModel.isLoading
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.send),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -156,6 +143,16 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         ],
       ),
     );
+  }
+
+  String? _sendErrorMessage(String? errorMessage) {
+    if (_messageController.text.trim().isEmpty) return null;
+
+    if (errorMessage?.contains('permission-denied') == true) {
+      return 'Firestore chua cap quyen gui tin nhan.';
+    }
+
+    return 'Khong gui duoc tin nhan.';
   }
 }
 

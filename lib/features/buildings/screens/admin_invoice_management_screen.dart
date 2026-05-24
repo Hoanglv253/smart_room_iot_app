@@ -2,6 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/services/app_firestore_service.dart';
+import '../view_models/admin_invoice_detail_view_model.dart';
+import '../view_models/create_invoice_view_model.dart';
+import '../view_models/invoice_list_view_model.dart';
 
 const _allInvoiceStatus = 'all';
 
@@ -42,16 +45,12 @@ class AdminInvoiceManagementScreen extends StatefulWidget {
 
 class _AdminInvoiceManagementScreenState
     extends State<AdminInvoiceManagementScreen> {
-  late int _selectedMonth;
-  late int _selectedYear;
-  String _selectedStatus = _allInvoiceStatus;
+  final _viewModel = InvoiceListViewModel();
 
   @override
-  void initState() {
-    super.initState();
-    final now = DateTime.now();
-    _selectedMonth = now.month;
-    _selectedYear = now.year;
+  void dispose() {
+    _viewModel.dispose();
+    super.dispose();
   }
 
   @override
@@ -76,158 +75,121 @@ class _AdminInvoiceManagementScreenState
               label: const Text('Tao hoa don'),
             )
           : null,
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream:
-            AppFirestoreService.buildingInvoices(widget.buildingId).snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return const _InvoiceEmptyView(
-              icon: Icons.lock_outline,
-              message: 'Khong tai duoc danh sach hoa don.',
-            );
-          }
+      body: AnimatedBuilder(
+        animation: _viewModel,
+        builder: (context, _) {
+          return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: _viewModel.buildingInvoices(widget.buildingId),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return const _InvoiceEmptyView(
+                  icon: Icons.lock_outline,
+                  message: 'Khong tai duoc danh sach hoa don.',
+                );
+              }
 
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          final invoices = (snapshot.data?.docs ?? []).toList();
-          invoices.sort((left, right) {
-            final leftKey = _periodSortKey(left.data());
-            final rightKey = _periodSortKey(right.data());
-            if (leftKey != rightKey) return rightKey.compareTo(leftKey);
-            return _timestampMillis(
-              right.data()['createdAt'],
-            ).compareTo(_timestampMillis(left.data()['createdAt']));
-          });
+              final invoices = _viewModel.sortInvoices(snapshot.data?.docs ?? []);
+              final yearOptions = _viewModel.yearOptions(invoices);
+              final periodPicker = _InvoicePeriodPicker(
+                month: _viewModel.selectedMonth,
+                year: _viewModel.selectedYear,
+                years: yearOptions,
+                onMonthChanged: (value) {
+                  if (value == null) return;
+                  _viewModel.setMonth(value);
+                },
+                onYearChanged: (value) {
+                  if (value == null) return;
+                  _viewModel.setYear(value);
+                },
+              );
 
-          final yearOptions = _yearOptions(invoices);
-          final periodPicker = _InvoicePeriodPicker(
-            month: _selectedMonth,
-            year: _selectedYear,
-            years: yearOptions,
-            onMonthChanged: (value) {
-              if (value == null) return;
-              setState(() => _selectedMonth = value);
-            },
-            onYearChanged: (value) {
-              if (value == null) return;
-              setState(() => _selectedYear = value);
-            },
-          );
+              if (invoices.isEmpty) {
+                return ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    periodPicker,
+                    _InvoiceEmptyView(
+                      icon: Icons.receipt_long_outlined,
+                      message: 'Chua co hoa don nao cho $buildingName.',
+                    ),
+                  ],
+                );
+              }
 
-          if (invoices.isEmpty) {
-            return ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                periodPicker,
-                _InvoiceEmptyView(
-                  icon: Icons.receipt_long_outlined,
-                  message: 'Chua co hoa don nao cho $buildingName.',
-                ),
-              ],
-            );
-          }
-
-          final monthlyInvoices = invoices.where((doc) {
-            final data = doc.data();
-            return _readInt(data['month']) == _selectedMonth &&
-                _readInt(data['year']) == _selectedYear;
-          }).toList();
-          final filteredInvoices = _filterInvoicesByStatus(monthlyInvoices);
+              final monthlyInvoices = _viewModel.monthlyInvoices(invoices);
+              final filteredInvoices = _viewModel.filteredInvoices(
+                monthlyInvoices,
+              );
 
           return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              periodPicker,
-              const SizedBox(height: 12),
-              _InvoiceRevenueOverview(invoices: monthlyInvoices),
-              const SizedBox(height: 12),
-              _InvoiceStatusFilterBar(
-                invoices: monthlyInvoices,
-                selectedStatus: _selectedStatus,
-                onChanged: (status) {
-                  setState(() => _selectedStatus = status);
-                },
-              ),
-              const SizedBox(height: 12),
-              if (filteredInvoices.isEmpty)
-                _InvoiceEmptyView(
-                  icon: Icons.event_busy_outlined,
-                  message:
-                      'Khong co hoa don ${_statusFilterText(_selectedStatus)}trong thang $_selectedMonth/$_selectedYear.',
-                )
-              else ...[
-                _InvoiceMonthHeader(
-                  data: {'month': _selectedMonth, 'year': _selectedYear},
-                  invoiceCount: filteredInvoices.length,
-                  totalAmount: filteredInvoices.fold<int>(
-                    0,
-                    (total, doc) => total + _readInt(doc.data()['totalAmount']),
+                padding: const EdgeInsets.all(16),
+                children: [
+                  periodPicker,
+                  const SizedBox(height: 12),
+                  _InvoiceRevenueOverview(invoices: monthlyInvoices),
+                  const SizedBox(height: 12),
+                  _InvoiceStatusFilterBar(
+                    invoices: monthlyInvoices,
+                    selectedStatus: _viewModel.selectedStatus,
+                    onChanged: _viewModel.setStatus,
                   ),
-                ),
-                const SizedBox(height: 8),
-                ...filteredInvoices.map((doc) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: _InvoiceCard(
-                      invoiceId: doc.id,
-                      data: doc.data(),
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => _AdminInvoiceDetailScreen(
-                              buildingId: widget.buildingId,
-                              invoiceId: doc.id,
-                              invoice: doc.data(),
-                              canConfirmPayment: widget.canConfirmPayment,
-                            ),
-                          ),
-                        );
+                  const SizedBox(height: 12),
+                  if (filteredInvoices.isEmpty)
+                    _InvoiceEmptyView(
+                      icon: Icons.event_busy_outlined,
+                      message:
+                          'Khong co hoa don ${_statusFilterText(_viewModel.selectedStatus)}trong thang ${_viewModel.selectedMonth}/${_viewModel.selectedYear}.',
+                    )
+                  else ...[
+                    _InvoiceMonthHeader(
+                      data: {
+                        'month': _viewModel.selectedMonth,
+                        'year': _viewModel.selectedYear,
                       },
+                      invoiceCount: filteredInvoices.length,
+                      totalAmount: filteredInvoices.fold<int>(
+                        0,
+                        (total, doc) =>
+                            total + _readInt(doc.data()['totalAmount']),
+                      ),
                     ),
-                  );
-                }),
-                const SizedBox(height: 8),
-              ],
-            ],
+                    const SizedBox(height: 8),
+                    ...filteredInvoices.map((doc) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: _InvoiceCard(
+                          invoiceId: doc.id,
+                          data: doc.data(),
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => _AdminInvoiceDetailScreen(
+                                  buildingId: widget.buildingId,
+                                  invoiceId: doc.id,
+                                  invoice: doc.data(),
+                                  canConfirmPayment:
+                                      widget.canConfirmPayment,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    }),
+                    const SizedBox(height: 8),
+                  ],
+                ],
+              );
+            },
           );
         },
       ),
     );
-  }
-
-  List<int> _yearOptions(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> invoices,
-  ) {
-    final years = <int>{DateTime.now().year, _selectedYear};
-    for (final invoice in invoices) {
-      final year = _readInt(invoice.data()['year']);
-      if (year > 0) years.add(year);
-    }
-    return years.toList()..sort((left, right) => right.compareTo(left));
-  }
-
-  List<QueryDocumentSnapshot<Map<String, dynamic>>> _filterInvoicesByStatus(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> invoices,
-  ) {
-    if (_selectedStatus == _allInvoiceStatus) return invoices;
-
-    return invoices.where((doc) {
-      final status = (doc.data()['status'] ?? InvoiceStatus.unpaid).toString();
-      return status == _selectedStatus;
-    }).toList();
-  }
-
-  int _periodSortKey(Map<String, dynamic> data) {
-    final year = _readInt(data['year']);
-    final month = _readInt(data['month']);
-    return year * 100 + month;
-  }
-
-  int _timestampMillis(Object? value) {
-    if (value is Timestamp) return value.millisecondsSinceEpoch;
-    return 0;
   }
 }
 
@@ -547,19 +509,16 @@ class _CreateInvoiceScreenState extends State<_CreateInvoiceScreen> {
   final _parkingFeeController = TextEditingController();
   final _otherFeeController = TextEditingController();
   final _discountController = TextEditingController();
+  final _viewModel = CreateInvoiceViewModel();
 
   late final Future<QuerySnapshot<Map<String, dynamic>>> _roomsFuture;
   String? _selectedRoomId;
   QueryDocumentSnapshot<Map<String, dynamic>>? _selectedRoom;
-  String? _roomHistoryMessage;
-  bool _hasDuplicateInvoice = false;
-  bool _isLoadingRoomHistory = false;
-  bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
-    _roomsFuture = AppFirestoreService.buildingRooms(widget.buildingId).get();
+    _roomsFuture = _viewModel.buildingRooms(widget.buildingId);
 
     final now = DateTime.now();
     _monthController.text = now.month.toString();
@@ -603,6 +562,7 @@ class _CreateInvoiceScreenState extends State<_CreateInvoiceScreen> {
     _parkingFeeController.dispose();
     _otherFeeController.dispose();
     _discountController.dispose();
+    _viewModel.dispose();
     super.dispose();
   }
 
@@ -613,11 +573,10 @@ class _CreateInvoiceScreenState extends State<_CreateInvoiceScreen> {
   void _handlePeriodChanged() {
     if (_selectedRoom == null) return;
 
-    setState(() {
-      _hasDuplicateInvoice = false;
-      _roomHistoryMessage =
-          'Ky hoa don da thay doi. Khi luu app se kiem tra trung ky voi ky moi.';
-    });
+    _viewModel.setHasDuplicateInvoice(false);
+    _viewModel.setRoomHistoryMessage(
+      'Ky hoa don da thay doi. Khi luu app se kiem tra trung ky voi ky moi.',
+    );
   }
 
   void _selectRoom(QueryDocumentSnapshot<Map<String, dynamic>> roomDoc) {
@@ -628,22 +587,25 @@ class _CreateInvoiceScreenState extends State<_CreateInvoiceScreen> {
     setState(() {
       _selectedRoomId = roomDoc.id;
       _selectedRoom = roomDoc;
-      _roomHistoryMessage = null;
-      _hasDuplicateInvoice = false;
       _roomRentController.text =
           (roomRent > 0 ? roomRent : defaultRent).toString();
       _electricityOldController.text = '0';
       _waterOldController.text = '0';
     });
+    _viewModel.setRoomHistoryMessage(null);
+    _viewModel.setHasDuplicateInvoice(false);
 
     _loadRoomInvoiceContext(roomDoc.id);
   }
 
   Future<void> _loadRoomInvoiceContext(String roomId) async {
-    setState(() => _isLoadingRoomHistory = true);
+    _viewModel.setRoomHistoryLoading(true);
 
     try {
-      final invoices = await _fetchRoomInvoices(roomId);
+      final invoices = await _viewModel.roomInvoices(
+        buildingId: widget.buildingId,
+        roomId: roomId,
+      );
       if (!mounted || _selectedRoomId != roomId) return;
 
       final currentPeriod = _periodKeyFromControllers();
@@ -656,37 +618,39 @@ class _CreateInvoiceScreenState extends State<_CreateInvoiceScreen> {
       }).toList()
         ..sort((left, right) => _periodKey(right).compareTo(_periodKey(left)));
 
-      setState(() {
-        _hasDuplicateInvoice = duplicateInvoice.isNotEmpty;
+      _viewModel.setHasDuplicateInvoice(duplicateInvoice.isNotEmpty);
 
-        if (previousInvoices.isNotEmpty) {
-          final previous = previousInvoices.first;
-          final electricityNew = _readInt(previous['electricityNew']);
-          final waterNew = _readInt(previous['waterNew']);
-          _electricityOldController.text = electricityNew.toString();
-          _waterOldController.text = waterNew.toString();
-          _roomHistoryMessage =
-              'Da lay chi so cu tu hoa don ${_periodLabel(previous)}.';
-        } else {
-          _roomHistoryMessage =
-              'Chua co hoa don truoc do, chi so cu dang mac dinh la 0.';
-        }
+      if (previousInvoices.isNotEmpty) {
+        final previous = previousInvoices.first;
+        final electricityNew = _readInt(previous['electricityNew']);
+        final waterNew = _readInt(previous['waterNew']);
+        _electricityOldController.text = electricityNew.toString();
+        _waterOldController.text = waterNew.toString();
+        _viewModel.setRoomHistoryMessage(
+          'Da lay chi so cu tu hoa don ${_periodLabel(previous)}.',
+        );
+      } else {
+        _viewModel.setRoomHistoryMessage(
+          'Chua co hoa don truoc do, chi so cu dang mac dinh la 0.',
+        );
+      }
 
-        if (_hasDuplicateInvoice) {
-          _roomHistoryMessage =
-              'Phong nay da co hoa don ${_monthController.text}/${_yearController.text}. Hay kiem tra lai truoc khi tao moi.';
-        }
-      });
-    } on FirebaseException catch (e) {
+      if (_viewModel.hasDuplicateInvoice) {
+        _viewModel.setRoomHistoryMessage(
+          'Phong nay da co hoa don ${_monthController.text}/${_yearController.text}. Hay kiem tra lai truoc khi tao moi.',
+        );
+      }
+    } catch (e) {
       if (!mounted || _selectedRoomId != roomId) return;
-      setState(() {
-        _roomHistoryMessage = e.code == 'permission-denied'
+      final message = e.toString();
+      _viewModel.setRoomHistoryMessage(
+        message.contains('permission-denied')
             ? 'Firestore chua cap quyen doc hoa don cu.'
-            : e.message ?? 'Khong tai duoc hoa don cu.';
-      });
+            : 'Khong tai duoc hoa don cu.',
+      );
     } finally {
       if (mounted && _selectedRoomId == roomId) {
-        setState(() => _isLoadingRoomHistory = false);
+        _viewModel.setRoomHistoryLoading(false);
       }
     }
   }
@@ -714,12 +678,16 @@ class _CreateInvoiceScreenState extends State<_CreateInvoiceScreen> {
 
     final List<Map<String, dynamic>> existingInvoices;
     try {
-      existingInvoices = await _fetchRoomInvoices(roomDoc.id);
-    } on FirebaseException catch (e) {
+      existingInvoices = await _viewModel.roomInvoices(
+        buildingId: widget.buildingId,
+        roomId: roomDoc.id,
+      );
+    } catch (e) {
+      final message = e.toString();
       _showSnack(
-        e.code == 'permission-denied'
+        message.contains('permission-denied')
             ? 'Firestore chua cap quyen kiem tra hoa don cu.'
-            : e.message ?? 'Khong kiem tra duoc hoa don cu.',
+            : 'Khong kiem tra duoc hoa don cu.',
       );
       return;
     }
@@ -729,12 +697,10 @@ class _CreateInvoiceScreenState extends State<_CreateInvoiceScreen> {
       return _periodKey(invoice) == currentPeriod;
     });
     if (hasDuplicate) {
-      if (mounted) setState(() => _hasDuplicateInvoice = true);
+      _viewModel.setHasDuplicateInvoice(true);
       _showSnack('Phong nay da co hoa don thang $month/$year.');
       return;
     }
-
-    setState(() => _isSaving = true);
 
     try {
       final electricityOld = _readInt(_electricityOldController.text);
@@ -752,52 +718,51 @@ class _CreateInvoiceScreenState extends State<_CreateInvoiceScreen> {
       final tenantEmail = _text(room['tenantEmail'], '');
       final dueDate = _dueDate(year, month, _readInt(widget.building['billDueDay']));
 
-      await AppFirestoreService.buildingInvoices(widget.buildingId).add({
-        'buildingId': widget.buildingId,
-        'roomId': roomDoc.id,
-        'roomName': roomName,
-        'roomNumber': roomNumber,
-        'tenantId': tenantId,
-        'tenantName': tenantName,
-        'tenantEmail': tenantEmail,
-        'month': month,
-        'year': year,
-        'periodKey': '$year-${month.toString().padLeft(2, '0')}',
-        'roomRent': _readInt(_roomRentController.text),
-        'electricityOld': electricityOld,
-        'electricityNew': electricityNew,
-        'electricityUsage': electricityUsage,
-        'electricityPrice': electricityPrice,
-        'electricityAmount': electricityUsage * electricityPrice,
-        'waterOld': waterOld,
-        'waterNew': waterNew,
-        'waterUsage': waterUsage,
-        'waterPrice': waterPrice,
-        'waterAmount': waterUsage * waterPrice,
-        'serviceFee': _readInt(_serviceFeeController.text),
-        'internetFee': _readInt(_internetFeeController.text),
-        'parkingFee': _readInt(_parkingFeeController.text),
-        'otherFee': _readInt(_otherFeeController.text),
-        'discount': _readInt(_discountController.text),
-        'totalAmount': _totalAmount,
-        'status': InvoiceStatus.unpaid,
-        'paymentMethod': '',
-        'paymentNote': '',
-        'dueDate': Timestamp.fromDate(dueDate),
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      final saved = await _viewModel.createInvoice(
+        buildingId: widget.buildingId,
+        invoice: {
+          'buildingId': widget.buildingId,
+          'roomId': roomDoc.id,
+          'roomName': roomName,
+          'roomNumber': roomNumber,
+          'tenantId': tenantId,
+          'tenantName': tenantName,
+          'tenantEmail': tenantEmail,
+          'month': month,
+          'year': year,
+          'periodKey': '$year-${month.toString().padLeft(2, '0')}',
+          'roomRent': _readInt(_roomRentController.text),
+          'electricityOld': electricityOld,
+          'electricityNew': electricityNew,
+          'electricityUsage': electricityUsage,
+          'electricityPrice': electricityPrice,
+          'electricityAmount': electricityUsage * electricityPrice,
+          'waterOld': waterOld,
+          'waterNew': waterNew,
+          'waterUsage': waterUsage,
+          'waterPrice': waterPrice,
+          'waterAmount': waterUsage * waterPrice,
+          'serviceFee': _readInt(_serviceFeeController.text),
+          'internetFee': _readInt(_internetFeeController.text),
+          'parkingFee': _readInt(_parkingFeeController.text),
+          'otherFee': _readInt(_otherFeeController.text),
+          'discount': _readInt(_discountController.text),
+          'totalAmount': _totalAmount,
+          'status': InvoiceStatus.unpaid,
+          'paymentMethod': '',
+          'paymentNote': '',
+          'dueDate': Timestamp.fromDate(dueDate),
+        },
+      );
+      if (!saved) {
+        _showSnack(_createInvoiceError());
+        return;
+      }
 
       if (!mounted) return;
       Navigator.of(context).pop();
-    } on FirebaseException catch (e) {
-      _showSnack(
-        e.code == 'permission-denied'
-            ? 'Firestore chua cap quyen tao hoa don.'
-            : e.message ?? 'Khong tao duoc hoa don.',
-      );
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
+    } catch (_) {
+      _showSnack('Khong tao duoc hoa don.');
     }
   }
 
@@ -829,16 +794,6 @@ class _CreateInvoiceScreenState extends State<_CreateInvoiceScreen> {
     return total < 0 ? 0 : total;
   }
 
-  Future<List<Map<String, dynamic>>> _fetchRoomInvoices(String roomId) async {
-    final snapshot =
-        await AppFirestoreService.buildingInvoices(widget.buildingId).get();
-    return snapshot.docs
-        .map((doc) => doc.data())
-        .where((invoice) => invoice['roomId'] == roomId)
-        .where((invoice) => invoice['status'] != InvoiceStatus.cancelled)
-        .toList();
-  }
-
   int _periodKeyFromControllers() {
     return _periodKey(
       null,
@@ -861,9 +816,12 @@ class _CreateInvoiceScreenState extends State<_CreateInvoiceScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Tao hoa don')),
-      body: FutureBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        future: _roomsFuture,
-        builder: (context, snapshot) {
+      body: AnimatedBuilder(
+        animation: _viewModel,
+        builder: (context, _) {
+          return FutureBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            future: _roomsFuture,
+            builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
@@ -885,7 +843,7 @@ class _CreateInvoiceScreenState extends State<_CreateInvoiceScreen> {
             );
           }
 
-          return ListView(
+              return ListView(
             padding: const EdgeInsets.all(16),
             children: [
               DropdownButtonFormField<String>(
@@ -909,14 +867,14 @@ class _CreateInvoiceScreenState extends State<_CreateInvoiceScreen> {
                   _selectRoom(roomDoc);
                 },
               ),
-              if (_isLoadingRoomHistory) ...[
+              if (_viewModel.isLoadingRoomHistory) ...[
                 const SizedBox(height: 10),
                 const LinearProgressIndicator(minHeight: 2),
-              ] else if (_roomHistoryMessage != null) ...[
+              ] else if (_viewModel.roomHistoryMessage != null) ...[
                 const SizedBox(height: 10),
                 _InvoiceNotice(
-                  message: _roomHistoryMessage!,
-                  isWarning: _hasDuplicateInvoice,
+                  message: _viewModel.roomHistoryMessage!,
+                  isWarning: _viewModel.hasDuplicateInvoice,
                 ),
               ],
               const SizedBox(height: 12),
@@ -962,10 +920,11 @@ class _CreateInvoiceScreenState extends State<_CreateInvoiceScreen> {
               _TotalPreview(total: _totalAmount),
               const SizedBox(height: 16),
               FilledButton.icon(
-                onPressed: _isSaving || _hasDuplicateInvoice
+                onPressed: _viewModel.isLoading ||
+                        _viewModel.hasDuplicateInvoice
                     ? null
                     : _saveInvoice,
-                icon: _isSaving
+                icon: _viewModel.isLoading
                     ? const SizedBox(
                         width: 18,
                         height: 18,
@@ -975,6 +934,8 @@ class _CreateInvoiceScreenState extends State<_CreateInvoiceScreen> {
                 label: const Text('Luu hoa don'),
               ),
             ],
+          );
+            },
           );
         },
       ),
@@ -998,6 +959,15 @@ class _CreateInvoiceScreenState extends State<_CreateInvoiceScreen> {
   void _showSnack(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  String _createInvoiceError() {
+    final error = _viewModel.errorMessage;
+    if (error?.contains('permission-denied') == true) {
+      return 'Firestore chua cap quyen tao hoa don.';
+    }
+
+    return 'Khong tao duoc hoa don.';
   }
 
   static int _readInt(Object? value) {
@@ -1036,70 +1006,46 @@ class _AdminInvoiceDetailScreen extends StatefulWidget {
 }
 
 class _AdminInvoiceDetailScreenState extends State<_AdminInvoiceDetailScreen> {
-  bool _isSaving = false;
+  final _viewModel = AdminInvoiceDetailViewModel();
+
+  @override
+  void dispose() {
+    _viewModel.dispose();
+    super.dispose();
+  }
 
   Future<void> _markPaid() async {
-    setState(() => _isSaving = true);
+    final saved = await _viewModel.markPaid(
+      buildingId: widget.buildingId,
+      invoiceId: widget.invoiceId,
+    );
 
-    try {
-      await AppFirestoreService.buildingInvoices(widget.buildingId)
-          .doc(widget.invoiceId)
-          .update({
-        'status': InvoiceStatus.paid,
-        'paymentMethod': 'admin_confirmed',
-        'paidAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      if (!mounted) return;
+    if (!mounted) return;
+    if (saved) {
       Navigator.of(context).pop();
-    } on FirebaseException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.code == 'permission-denied'
-                ? 'Firestore chua cap quyen xac nhan thanh toan.'
-                : e.message ?? 'Khong xac nhan duoc thanh toan.',
-          ),
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
+      return;
     }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(_adminPaymentError('confirm'))),
+    );
   }
 
   Future<void> _rejectPayment() async {
-    setState(() => _isSaving = true);
+    final saved = await _viewModel.rejectPayment(
+      buildingId: widget.buildingId,
+      invoiceId: widget.invoiceId,
+    );
 
-    try {
-      await AppFirestoreService.buildingInvoices(widget.buildingId)
-          .doc(widget.invoiceId)
-          .update({
-        'status': InvoiceStatus.unpaid,
-        'paymentMethod': FieldValue.delete(),
-        'paymentNote': FieldValue.delete(),
-        'paidReportedAt': FieldValue.delete(),
-        'paymentRejectedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      if (!mounted) return;
+    if (!mounted) return;
+    if (saved) {
       Navigator.of(context).pop();
-    } on FirebaseException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.code == 'permission-denied'
-                ? 'Firestore chua cap quyen tu choi thanh toan.'
-                : e.message ?? 'Khong tu choi duoc thanh toan.',
-          ),
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
+      return;
     }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(_adminPaymentError('reject'))),
+    );
   }
 
   @override
@@ -1158,27 +1104,51 @@ class _AdminInvoiceDetailScreenState extends State<_AdminInvoiceDetailScreen> {
           ],
           const SizedBox(height: 16),
           if (widget.canConfirmPayment && status != InvoiceStatus.paid) ...[
-            FilledButton.icon(
-              onPressed: _isSaving ? null : _markPaid,
-              icon: const Icon(Icons.verified_outlined),
-              label: Text(
-                status == InvoiceStatus.pending
-                    ? 'Xac nhan da nhan tien'
-                    : 'Danh dau da thanh toan',
-              ),
+            AnimatedBuilder(
+              animation: _viewModel,
+              builder: (context, _) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: _viewModel.isLoading ? null : _markPaid,
+                      icon: const Icon(Icons.verified_outlined),
+                      label: Text(
+                        status == InvoiceStatus.pending
+                            ? 'Xac nhan da nhan tien'
+                            : 'Danh dau da thanh toan',
+                      ),
+                    ),
+                    if (status == InvoiceStatus.pending) ...[
+                      const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        onPressed:
+                            _viewModel.isLoading ? null : _rejectPayment,
+                        icon: const Icon(Icons.close_outlined),
+                        label: const Text('Tu choi thanh toan'),
+                      ),
+                    ],
+                  ],
+                );
+              },
             ),
-            if (status == InvoiceStatus.pending) ...[
-              const SizedBox(height: 10),
-              OutlinedButton.icon(
-                onPressed: _isSaving ? null : _rejectPayment,
-                icon: const Icon(Icons.close_outlined),
-                label: const Text('Tu choi thanh toan'),
-              ),
-            ],
           ],
         ],
       ),
     );
+  }
+
+  String _adminPaymentError(String action) {
+    final error = _viewModel.errorMessage;
+    if (error?.contains('permission-denied') == true) {
+      return action == 'confirm'
+          ? 'Firestore chua cap quyen xac nhan thanh toan.'
+          : 'Firestore chua cap quyen tu choi thanh toan.';
+    }
+
+    return action == 'confirm'
+        ? 'Khong xac nhan duoc thanh toan.'
+        : 'Khong tu choi duoc thanh toan.';
   }
 }
 

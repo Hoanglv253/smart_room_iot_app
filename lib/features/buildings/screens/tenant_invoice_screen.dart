@@ -1,15 +1,18 @@
-import 'dart:convert';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/services/app_firestore_service.dart';
+import '../view_models/invoice_list_view_model.dart';
+import '../view_models/tenant_invoice_detail_view_model.dart';
 
 const _allInvoiceStatus = 'all';
-const _payosBackendBaseUrl = String.fromEnvironment('PAYOS_BACKEND_URL');
+const _payosBackendBaseUrl = String.fromEnvironment(
+  'PAYOS_BACKEND_URL',
+  defaultValue:
+      'https://asia-southeast1-smart-room-iot-353c5.cloudfunctions.net/api',
+);
 
 class _InvoiceStatusOption {
   const _InvoiceStatusOption(this.value, this.label);
@@ -44,192 +47,157 @@ class TenantInvoiceScreen extends StatefulWidget {
 }
 
 class _TenantInvoiceScreenState extends State<TenantInvoiceScreen> {
-  late int _selectedMonth;
-  late int _selectedYear;
-  String _selectedStatus = _allInvoiceStatus;
+  final _viewModel = InvoiceListViewModel();
 
   @override
-  void initState() {
-    super.initState();
-    final now = DateTime.now();
-    _selectedMonth = now.month;
-    _selectedYear = now.year;
+  void dispose() {
+    _viewModel.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Hoa don cua toi')),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: AppFirestoreService.buildingInvoices(widget.buildingId)
-            .where('tenantId', isEqualTo: widget.user.uid)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return const _TenantInvoiceEmptyView(
-              icon: Icons.lock_outline,
-              message: 'Khong tai duoc hoa don.',
-            );
-          }
+      body: AnimatedBuilder(
+        animation: _viewModel,
+        builder: (context, _) {
+          return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: _viewModel.tenantInvoices(
+              buildingId: widget.buildingId,
+              tenantId: widget.user.uid,
+            ),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return const _TenantInvoiceEmptyView(
+                  icon: Icons.lock_outline,
+                  message: 'Khong tai duoc hoa don.',
+                );
+              }
 
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          final invoices = (snapshot.data?.docs ?? []).where((doc) {
-            return doc.data()['roomId'] == widget.roomId;
-          }).toList()
-            ..sort((left, right) {
-              final leftKey = _periodSortKey(left.data());
-              final rightKey = _periodSortKey(right.data());
-              if (leftKey != rightKey) return rightKey.compareTo(leftKey);
-              return _timestampMillis(
-                right.data()['createdAt'],
-              ).compareTo(_timestampMillis(left.data()['createdAt']));
-            });
-
-          final yearOptions = _yearOptions(invoices);
-          final periodPicker = _TenantInvoicePeriodPicker(
-            month: _selectedMonth,
-            year: _selectedYear,
-            years: yearOptions,
-            onMonthChanged: (value) {
-              if (value == null) return;
-              setState(() => _selectedMonth = value);
-            },
-            onYearChanged: (value) {
-              if (value == null) return;
-              setState(() => _selectedYear = value);
-            },
-          );
-
-          if (invoices.isEmpty) {
-            return ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                periodPicker,
-                const _TenantInvoiceEmptyView(
-                  icon: Icons.receipt_long_outlined,
-                  message: 'Phong cua ban chua co hoa don.',
-                ),
-              ],
-            );
-          }
-
-          final monthlyInvoices = invoices.where((doc) {
-            final data = doc.data();
-            return _readInt(data['month']) == _selectedMonth &&
-                _readInt(data['year']) == _selectedYear;
-          }).toList();
-          final filteredInvoices = _filterInvoicesByStatus(monthlyInvoices);
-
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              periodPicker,
-              const SizedBox(height: 12),
-              _TenantInvoiceStatusFilterBar(
-                invoices: monthlyInvoices,
-                selectedStatus: _selectedStatus,
-                onChanged: (status) {
-                  setState(() => _selectedStatus = status);
+              final invoices = _viewModel.sortInvoices(
+                (snapshot.data?.docs ?? []).where((doc) {
+                  return doc.data()['roomId'] == widget.roomId;
+                }),
+              );
+              final yearOptions = _viewModel.yearOptions(invoices);
+              final periodPicker = _TenantInvoicePeriodPicker(
+                month: _viewModel.selectedMonth,
+                year: _viewModel.selectedYear,
+                years: yearOptions,
+                onMonthChanged: (value) {
+                  if (value == null) return;
+                  _viewModel.setMonth(value);
                 },
-              ),
-              const SizedBox(height: 12),
-              if (filteredInvoices.isEmpty)
-                _TenantInvoiceEmptyView(
-                  icon: Icons.event_busy_outlined,
-                  message:
-                      'Khong co hoa don ${_statusFilterText(_selectedStatus)}trong thang $_selectedMonth/$_selectedYear.',
-                )
-              else ...[
-                _TenantInvoiceMonthHeader(
-                  data: {'month': _selectedMonth, 'year': _selectedYear},
-                  invoiceCount: filteredInvoices.length,
-                  totalAmount: filteredInvoices.fold<int>(
-                    0,
-                    (total, doc) => total + _readInt(doc.data()['totalAmount']),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                ...filteredInvoices.map((doc) {
-                  final data = doc.data();
-                  final status = (data['status'] ?? InvoiceStatus.unpaid).toString();
+                onYearChanged: (value) {
+                  if (value == null) return;
+                  _viewModel.setYear(value);
+                },
+              );
 
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Card(
-                      elevation: 1,
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor:
-                              _statusColor(status).withValues(alpha: 0.14),
-                          child: Icon(
-                            Icons.receipt_long_outlined,
-                            color: _statusColor(status),
-                          ),
-                        ),
-                        title: Text(_periodLabel(data)),
-                        subtitle: Text(_statusLabel(status)),
-                        trailing: Text(
-                          _money(data['totalAmount']),
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => _TenantInvoiceDetailScreen(
-                                buildingId: widget.buildingId,
-                                invoiceId: doc.id,
-                                invoice: data,
-                              ),
-                            ),
-                          );
-                        },
+              if (invoices.isEmpty) {
+                return ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    periodPicker,
+                    const _TenantInvoiceEmptyView(
+                      icon: Icons.receipt_long_outlined,
+                      message: 'Phong cua ban chua co hoa don.',
+                    ),
+                  ],
+                );
+              }
+
+              final monthlyInvoices = _viewModel.monthlyInvoices(invoices);
+              final filteredInvoices = _viewModel.filteredInvoices(
+                monthlyInvoices,
+              );
+
+              return ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  periodPicker,
+                  const SizedBox(height: 12),
+                  _TenantInvoiceStatusFilterBar(
+                    invoices: monthlyInvoices,
+                    selectedStatus: _viewModel.selectedStatus,
+                    onChanged: _viewModel.setStatus,
+                  ),
+                  const SizedBox(height: 12),
+                  if (filteredInvoices.isEmpty)
+                    _TenantInvoiceEmptyView(
+                      icon: Icons.event_busy_outlined,
+                      message:
+                          'Khong co hoa don ${_statusFilterText(_viewModel.selectedStatus)}trong thang ${_viewModel.selectedMonth}/${_viewModel.selectedYear}.',
+                    )
+                  else ...[
+                    _TenantInvoiceMonthHeader(
+                      data: {
+                        'month': _viewModel.selectedMonth,
+                        'year': _viewModel.selectedYear,
+                      },
+                      invoiceCount: filteredInvoices.length,
+                      totalAmount: filteredInvoices.fold<int>(
+                        0,
+                        (total, doc) =>
+                            total + _readInt(doc.data()['totalAmount']),
                       ),
                     ),
-                  );
-                }),
-                const SizedBox(height: 8),
-              ],
-            ],
+                    const SizedBox(height: 8),
+                    ...filteredInvoices.map((doc) {
+                      final data = doc.data();
+                      final status =
+                          (data['status'] ?? InvoiceStatus.unpaid).toString();
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Card(
+                          elevation: 1,
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor:
+                                  _statusColor(status).withValues(alpha: 0.14),
+                              child: Icon(
+                                Icons.receipt_long_outlined,
+                                color: _statusColor(status),
+                              ),
+                            ),
+                            title: Text(_periodLabel(data)),
+                            subtitle: Text(_statusLabel(status)),
+                            trailing: Text(
+                              _money(data['totalAmount']),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => _TenantInvoiceDetailScreen(
+                                    buildingId: widget.buildingId,
+                                    invoiceId: doc.id,
+                                    invoice: data,
+                                    user: widget.user,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      );
+                    }),
+                    const SizedBox(height: 8),
+                  ],
+                ],
+              );
+            },
           );
         },
       ),
     );
-  }
-
-  List<int> _yearOptions(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> invoices,
-  ) {
-    final years = <int>{DateTime.now().year, _selectedYear};
-    for (final invoice in invoices) {
-      final year = _readInt(invoice.data()['year']);
-      if (year > 0) years.add(year);
-    }
-    return years.toList()..sort((left, right) => right.compareTo(left));
-  }
-
-  List<QueryDocumentSnapshot<Map<String, dynamic>>> _filterInvoicesByStatus(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> invoices,
-  ) {
-    if (_selectedStatus == _allInvoiceStatus) return invoices;
-
-    return invoices.where((doc) {
-      final status = (doc.data()['status'] ?? InvoiceStatus.unpaid).toString();
-      return status == _selectedStatus;
-    }).toList();
-  }
-
-  int _periodSortKey(Map<String, dynamic> data) {
-    final year = _readInt(data['year']);
-    final month = _readInt(data['month']);
-    return year * 100 + month;
-  }
-
-  int _timestampMillis(Object? value) {
-    if (value is Timestamp) return value.millisecondsSinceEpoch;
-    return 0;
   }
 }
 
@@ -409,11 +377,13 @@ class _TenantInvoiceDetailScreen extends StatefulWidget {
     required this.buildingId,
     required this.invoiceId,
     required this.invoice,
+    required this.user,
   });
 
   final String buildingId;
   final String invoiceId;
   final Map<String, dynamic> invoice;
+  final User user;
 
   @override
   State<_TenantInvoiceDetailScreen> createState() =>
@@ -422,220 +392,222 @@ class _TenantInvoiceDetailScreen extends StatefulWidget {
 
 class _TenantInvoiceDetailScreenState extends State<_TenantInvoiceDetailScreen> {
   final _noteController = TextEditingController();
-  bool _isSending = false;
-  bool _isCreatingPayosPayment = false;
+  final _viewModel = TenantInvoiceDetailViewModel();
 
   @override
   void dispose() {
     _noteController.dispose();
+    _viewModel.dispose();
     super.dispose();
   }
 
   Future<void> _reportPaid() async {
-    setState(() => _isSending = true);
+    final sent = await _viewModel.reportManualPayment(
+      buildingId: widget.buildingId,
+      invoiceId: widget.invoiceId,
+      note: _noteController.text,
+    );
 
-    try {
-      await AppFirestoreService.buildingInvoices(widget.buildingId)
-          .doc(widget.invoiceId)
-          .update({
-        'status': InvoiceStatus.pending,
-        'paymentMethod': 'manual_transfer',
-        'paymentNote': _noteController.text.trim(),
-        'paidReportedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      if (!mounted) return;
+    if (!mounted) return;
+    if (sent) {
       Navigator.of(context).pop();
-    } on FirebaseException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.code == 'permission-denied'
-                ? 'Firestore chua cap quyen bao da thanh toan.'
-                : e.message ?? 'Khong gui duoc thong tin thanh toan.',
-          ),
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _isSending = false);
+      return;
     }
+
+    _showSnack(_tenantPaymentError());
   }
 
   Future<void> _startPayosPayment() async {
-    setState(() => _isCreatingPayosPayment = true);
+    final uri = await _viewModel.createPayosPayment(
+      backendBaseUrl: _payosBackendBaseUrl,
+      user: widget.user,
+      buildingId: widget.buildingId,
+      invoiceId: widget.invoiceId,
+    );
+    if (!mounted || uri == null) {
+      if (_viewModel.errorMessage != null) _showSnack(_payosErrorMessage());
+      return;
+    }
 
-    try {
-      if (_payosBackendBaseUrl.isEmpty) {
-        _showSnack('Chua cau hinh PAYOS_BACKEND_URL cho app.');
-        return;
-      }
-
-      final user = FirebaseAuth.instance.currentUser;
-      final idToken = await user?.getIdToken();
-      if (idToken == null) {
-        _showSnack('Hay dang nhap lai de thanh toan PayOS.');
-        return;
-      }
-
-      final response = await http.post(
-        _backendUri('/create-payos-payment'),
-        headers: {
-          'Authorization': 'Bearer $idToken',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'buildingId': widget.buildingId,
-          'invoiceId': widget.invoiceId,
-        }),
-      );
-
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        _showSnack(data['message']?.toString() ?? 'Khong tao duoc thanh toan PayOS.');
-        return;
-      }
-
-      final checkoutUrl = data['checkoutUrl']?.toString() ?? '';
-      final uri = Uri.tryParse(checkoutUrl);
-
-      if (uri == null || checkoutUrl.isEmpty) {
-        _showSnack('PayOS chua tra ve link thanh toan.');
-        return;
-      }
-
-      final opened = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
-      if (!opened) {
-        _showSnack('Khong mo duoc link thanh toan PayOS.');
-      }
-    } catch (_) {
-      _showSnack('Khong tao duoc thanh toan PayOS.');
-    } finally {
-      if (mounted) setState(() => _isCreatingPayosPayment = false);
+    final opened = await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+    );
+    if (!opened) {
+      _showSnack('Khong mo duoc link thanh toan PayOS.');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final invoice = widget.invoice;
-    final status = (invoice['status'] ?? InvoiceStatus.unpaid).toString();
-    final paymentNote = (invoice['paymentNote'] ?? '').toString();
-    final canPayOnline = status == InvoiceStatus.unpaid ||
-        status == InvoiceStatus.waitingPayment;
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: AppFirestoreService.buildingInvoices(
+        widget.buildingId,
+      ).doc(widget.invoiceId).snapshots(),
+      builder: (context, snapshot) {
+        final invoice = snapshot.data?.data() ?? widget.invoice;
+        final status = (invoice['status'] ?? InvoiceStatus.unpaid).toString();
+        final paymentNote = (invoice['paymentNote'] ?? '').toString();
+        final canPayOnline = status == InvoiceStatus.unpaid ||
+            status == InvoiceStatus.waitingPayment;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Chi tiet hoa don')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _TenantInvoiceHeader(data: invoice),
-          const SizedBox(height: 12),
-          _TenantInvoiceSection(
-            title: 'Thong tin',
+        return Scaffold(
+          appBar: AppBar(title: const Text('Chi tiet hoa don')),
+          body: ListView(
+            padding: const EdgeInsets.all(16),
             children: [
-              _InfoRow(label: 'Phong', value: _text(invoice['roomName'], '')),
-              _InfoRow(label: 'Ky hoa don', value: _periodLabel(invoice)),
-              _InfoRow(label: 'Han thanh toan', value: _dateText(invoice['dueDate'])),
-              _InfoRow(label: 'Trang thai', value: _statusLabel(status)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _TenantInvoiceSection(
-            title: 'Chi tiet thanh toan',
-            children: [
-              _InfoRow(label: 'Tien phong', value: _money(invoice['roomRent'])),
-              _InfoRow(
-                label: 'Tien dien',
-                value:
-                    '${_readInt(invoice['electricityUsage'])} so - ${_money(invoice['electricityAmount'])}',
-              ),
-              _InfoRow(
-                label: 'Tien nuoc',
-                value:
-                    '${_readInt(invoice['waterUsage'])} so - ${_money(invoice['waterAmount'])}',
-              ),
-              _InfoRow(label: 'Phi dich vu', value: _money(invoice['serviceFee'])),
-              _InfoRow(label: 'Internet', value: _money(invoice['internetFee'])),
-              _InfoRow(label: 'Gui xe', value: _money(invoice['parkingFee'])),
-              _InfoRow(label: 'Phu thu', value: _money(invoice['otherFee'])),
-              _InfoRow(label: 'Giam tru', value: _money(invoice['discount'])),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _TotalBox(total: _readInt(invoice['totalAmount'])),
-          if (canPayOnline || status == InvoiceStatus.pending) ...[
-            const SizedBox(height: 12),
-            _PaymentInstructionSection(
-              buildingId: widget.buildingId,
-              invoice: invoice,
-            ),
-          ],
-          if (canPayOnline) ...[
-            const SizedBox(height: 12),
-            FilledButton.icon(
-              onPressed:
-                  _isCreatingPayosPayment ? null : _startPayosPayment,
-              icon: _isCreatingPayosPayment
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.payment_outlined),
-              label: Text(
-                status == InvoiceStatus.waitingPayment
-                    ? 'Mo lai thanh toan PayOS'
-                    : 'Thanh toan tu dong PayOS',
-              ),
-            ),
-          ],
-          if (paymentNote.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            _TenantInvoiceSection(
-              title: 'Ghi chu da gui',
-              children: [_InfoRow(label: 'Noi dung', value: paymentNote)],
-            ),
-          ],
-          if (status == InvoiceStatus.unpaid) ...[
-            const SizedBox(height: 16),
-            if (invoice['paymentRejectedAt'] != null) ...[
-              const _PaymentRejectedNotice(),
+              _TenantInvoiceHeader(data: invoice),
               const SizedBox(height: 12),
-            ],
-            TextField(
-              controller: _noteController,
-              minLines: 2,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                labelText: 'Ghi chu / ma giao dich',
-                border: OutlineInputBorder(),
+              _TenantInvoiceSection(
+                title: 'Thong tin',
+                children: [
+                  _InfoRow(
+                    label: 'Phong',
+                    value: _text(invoice['roomName'], ''),
+                  ),
+                  _InfoRow(label: 'Ky hoa don', value: _periodLabel(invoice)),
+                  _InfoRow(
+                    label: 'Han thanh toan',
+                    value: _dateText(invoice['dueDate']),
+                  ),
+                  _InfoRow(label: 'Trang thai', value: _statusLabel(status)),
+                ],
               ),
-            ),
-            const SizedBox(height: 12),
-            FilledButton.icon(
-              onPressed: _isSending ? null : _reportPaid,
-              icon: _isSending
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.payments_outlined),
-              label: const Text('Bao da thanh toan'),
-            ),
-          ],
-        ],
-      ),
+              const SizedBox(height: 12),
+              _TenantInvoiceSection(
+                title: 'Chi tiet thanh toan',
+                children: [
+                  _InfoRow(
+                    label: 'Tien phong',
+                    value: _money(invoice['roomRent']),
+                  ),
+                  _InfoRow(
+                    label: 'Tien dien',
+                    value:
+                        '${_readInt(invoice['electricityUsage'])} so - ${_money(invoice['electricityAmount'])}',
+                  ),
+                  _InfoRow(
+                    label: 'Tien nuoc',
+                    value:
+                        '${_readInt(invoice['waterUsage'])} so - ${_money(invoice['waterAmount'])}',
+                  ),
+                  _InfoRow(
+                    label: 'Phi dich vu',
+                    value: _money(invoice['serviceFee']),
+                  ),
+                  _InfoRow(
+                    label: 'Internet',
+                    value: _money(invoice['internetFee']),
+                  ),
+                  _InfoRow(
+                    label: 'Gui xe',
+                    value: _money(invoice['parkingFee']),
+                  ),
+                  _InfoRow(label: 'Phu thu', value: _money(invoice['otherFee'])),
+                  _InfoRow(label: 'Giam tru', value: _money(invoice['discount'])),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _TotalBox(total: _readInt(invoice['totalAmount'])),
+              if (canPayOnline || status == InvoiceStatus.pending) ...[
+                const SizedBox(height: 12),
+                _PaymentInstructionSection(
+                  buildingId: widget.buildingId,
+                  invoice: invoice,
+                  viewModel: _viewModel,
+                ),
+              ],
+              if (canPayOnline) ...[
+                const SizedBox(height: 12),
+                AnimatedBuilder(
+                  animation: _viewModel,
+                  builder: (context, _) {
+                    return FilledButton.icon(
+                      onPressed: _viewModel.isCreatingPayosPayment
+                          ? null
+                          : _startPayosPayment,
+                      icon: _viewModel.isCreatingPayosPayment
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.payment_outlined),
+                      label: Text(
+                        status == InvoiceStatus.waitingPayment
+                            ? 'Mo lai thanh toan PayOS'
+                            : 'Thanh toan tu dong PayOS',
+                      ),
+                    );
+                  },
+                ),
+              ],
+              if (paymentNote.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                _TenantInvoiceSection(
+                  title: 'Ghi chu da gui',
+                  children: [_InfoRow(label: 'Noi dung', value: paymentNote)],
+                ),
+              ],
+              if (status == InvoiceStatus.unpaid) ...[
+                const SizedBox(height: 16),
+                if (invoice['paymentRejectedAt'] != null) ...[
+                  const _PaymentRejectedNotice(),
+                  const SizedBox(height: 12),
+                ],
+                TextField(
+                  controller: _noteController,
+                  minLines: 2,
+                  maxLines: 4,
+                  decoration: const InputDecoration(
+                    labelText: 'Ghi chu / ma giao dich',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                AnimatedBuilder(
+                  animation: _viewModel,
+                  builder: (context, _) {
+                    return FilledButton.icon(
+                      onPressed: _viewModel.isLoading ? null : _reportPaid,
+                      icon: _viewModel.isLoading
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.payments_outlined),
+                      label: const Text('Bao da thanh toan'),
+                    );
+                  },
+                ),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 
   void _showSnack(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  String _tenantPaymentError() {
+    final error = _viewModel.errorMessage;
+    if (error?.contains('permission-denied') == true) {
+      return 'Firestore chua cap quyen bao da thanh toan.';
+    }
+
+    return 'Khong gui duoc thong tin thanh toan.';
+  }
+
+  String _payosErrorMessage() {
+    final error = _viewModel.errorMessage ?? '';
+    return error
+        .replaceFirst('TimeoutException: ', '')
+        .replaceFirst('Exception: ', '');
   }
 }
 
@@ -671,15 +643,17 @@ class _PaymentInstructionSection extends StatelessWidget {
   const _PaymentInstructionSection({
     required this.buildingId,
     required this.invoice,
+    required this.viewModel,
   });
 
   final String buildingId;
   final Map<String, dynamic> invoice;
+  final TenantInvoiceDetailViewModel viewModel;
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      future: AppFirestoreService.buildings.doc(buildingId).get(),
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: viewModel.building(buildingId),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const _TenantInvoiceSection(
@@ -693,7 +667,7 @@ class _PaymentInstructionSection extends StatelessWidget {
           );
         }
 
-        if (snapshot.hasError || snapshot.data?.data() == null) {
+        if (snapshot.hasError || snapshot.data == null) {
           return const _TenantInvoiceSection(
             title: 'Huong dan thanh toan',
             children: [
@@ -705,7 +679,7 @@ class _PaymentInstructionSection extends StatelessWidget {
           );
         }
 
-        final building = snapshot.data!.data()!;
+        final building = snapshot.data!;
         final settings = _readMap(building['paymentSettings']);
         final bankName = _text(settings['bankName'], 'Chua thiet lap');
         final bankId = _compactText(settings['bankId']);
@@ -1134,14 +1108,6 @@ String _vietQrUrl({
       if (accountName.trim().isNotEmpty) 'accountName': accountName.trim(),
     },
   ).toString();
-}
-
-Uri _backendUri(String path) {
-  final baseUrl = _payosBackendBaseUrl.endsWith('/')
-      ? _payosBackendBaseUrl.substring(0, _payosBackendBaseUrl.length - 1)
-      : _payosBackendBaseUrl;
-  final normalizedPath = path.startsWith('/') ? path : '/$path';
-  return Uri.parse('$baseUrl$normalizedPath');
 }
 
 int _readInt(Object? value) {

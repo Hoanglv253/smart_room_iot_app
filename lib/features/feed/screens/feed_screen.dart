@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../../../core/services/app_firestore_service.dart';
 import '../../messages/screens/chat_detail_screen.dart';
-
-enum _FeedFilter { buildings, managers, tenants }
+import '../../profile/screens/profile_screen.dart';
+import '../view_models/feed_view_model.dart';
 
 class FeedScreen extends StatefulWidget {
   const FeedScreen({
@@ -23,118 +23,87 @@ class FeedScreen extends StatefulWidget {
 
 class _FeedScreenState extends State<FeedScreen> {
   final _searchController = TextEditingController();
-  var _filter = _FeedFilter.buildings;
-  String _query = '';
+  final _viewModel = FeedViewModel();
 
   @override
   void initState() {
     super.initState();
     _searchController.addListener(() {
-      setState(() => _query = _searchController.text.trim().toLowerCase());
+      _viewModel.setQuery(_searchController.text);
     });
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _viewModel.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        TextField(
-          controller: _searchController,
-          decoration: const InputDecoration(
-            hintText: 'Tim toa nha, quan ly, nguoi thue...',
-            prefixIcon: Icon(Icons.search),
-            border: OutlineInputBorder(),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
+    return AnimatedBuilder(
+      animation: _viewModel,
+      builder: (context, _) {
+        return ListView(
+          padding: const EdgeInsets.all(16),
           children: [
-            ChoiceChip(
-              label: const Text('Toa nha'),
-              selected: _filter == _FeedFilter.buildings,
-              onSelected: (_) => setState(() => _filter = _FeedFilter.buildings),
+            TextField(
+              controller: _searchController,
+              decoration: const InputDecoration(
+                hintText: 'Tim toa nha, quan ly, nguoi thue...',
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
+              ),
             ),
-            ChoiceChip(
-              label: const Text('Quan ly'),
-              selected: _filter == _FeedFilter.managers,
-              onSelected: (_) => setState(() => _filter = _FeedFilter.managers),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ChoiceChip(
+                  label: const Text('Toa nha'),
+                  selected: _viewModel.filter == FeedFilter.buildings,
+                  onSelected: (_) => _viewModel.setFilter(FeedFilter.buildings),
+                ),
+                ChoiceChip(
+                  label: const Text('Quan ly'),
+                  selected: _viewModel.filter == FeedFilter.managers,
+                  onSelected: (_) => _viewModel.setFilter(FeedFilter.managers),
+                ),
+                ChoiceChip(
+                  label: const Text('Nguoi thue'),
+                  selected: _viewModel.filter == FeedFilter.tenants,
+                  onSelected: (_) => _viewModel.setFilter(FeedFilter.tenants),
+                ),
+              ],
             ),
-            ChoiceChip(
-              label: const Text('Nguoi thue'),
-              selected: _filter == _FeedFilter.tenants,
-              onSelected: (_) => setState(() => _filter = _FeedFilter.tenants),
-            ),
+            const SizedBox(height: 16),
+            switch (_viewModel.filter) {
+              FeedFilter.buildings => _BuildingAdList(
+                  user: widget.user,
+                  role: widget.role,
+                  query: _viewModel.query,
+                  viewModel: _viewModel,
+                ),
+              FeedFilter.managers => _UserDirectoryList(
+                  currentUser: widget.user,
+                  role: UserRole.manager,
+                  query: _viewModel.query,
+                  viewModel: _viewModel,
+                ),
+              FeedFilter.tenants => _UserDirectoryList(
+                  currentUser: widget.user,
+                  role: UserRole.user,
+                  query: _viewModel.query,
+                  viewModel: _viewModel,
+                ),
+            },
           ],
-        ),
-        const SizedBox(height: 16),
-        switch (_filter) {
-          _FeedFilter.buildings => _BuildingAdList(
-              user: widget.user,
-              role: widget.role,
-              query: _query,
-            ),
-          _FeedFilter.managers => _UserDirectoryList(
-              currentUser: widget.user,
-              role: UserRole.manager,
-              query: _query,
-            ),
-          _FeedFilter.tenants => _UserDirectoryList(
-              currentUser: widget.user,
-              role: UserRole.user,
-              query: _query,
-            ),
-        },
-      ],
+        );
+      },
     );
   }
-}
-
-Future<String> _findOrCreatePrivateChat({
-  required User currentUser,
-  required String otherUserId,
-  required String otherUserName,
-}) async {
-  final existing = await AppFirestoreService.chats
-      .where('type', isEqualTo: ChatType.private)
-      .where('memberIds', arrayContains: currentUser.uid)
-      .get();
-
-  final found = existing.docs.where((doc) {
-    final data = doc.data();
-    if (data['isDeleted'] == true) return false;
-    final deletedFor = List<String>.from(data['deletedFor'] ?? []);
-    if (deletedFor.contains(currentUser.uid)) return false;
-    final members = List<String>.from(data['memberIds'] ?? []);
-    return members.contains(otherUserId);
-  }).toList();
-
-  if (found.isNotEmpty) {
-    return found.first.id;
-  }
-
-  final currentName = currentUser.displayName ?? currentUser.email ?? 'Ban';
-  final chatDoc = await AppFirestoreService.chats.add({
-    'type': ChatType.private,
-    'ownerId': currentUser.uid,
-    'title': '$currentName - $otherUserName',
-    'memberIds': [currentUser.uid, otherUserId],
-    'deletedFor': [],
-    'isDeleted': false,
-    'lastMessage': '',
-    'createdAt': FieldValue.serverTimestamp(),
-    'updatedAt': FieldValue.serverTimestamp(),
-  });
-
-  return chatDoc.id;
 }
 
 class _BuildingAdList extends StatelessWidget {
@@ -142,18 +111,18 @@ class _BuildingAdList extends StatelessWidget {
     required this.user,
     required this.role,
     required this.query,
+    required this.viewModel,
   });
 
   final User user;
   final String role;
   final String query;
+  final FeedViewModel viewModel;
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: AppFirestoreService.buildings
-          .where('adPublished', isEqualTo: true)
-          .snapshots(),
+      stream: viewModel.publishedBuildings(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return const _FeedEmptyState(
@@ -190,6 +159,7 @@ class _BuildingAdList extends StatelessWidget {
               building: doc.data(),
               user: user,
               role: role,
+              viewModel: viewModel,
             );
           }).toList(),
         );
@@ -223,6 +193,7 @@ class _BuildingAdCard extends StatelessWidget {
     required this.building,
     required this.user,
     required this.role,
+    required this.viewModel,
     this.showFullDetails = false,
   });
 
@@ -230,6 +201,7 @@ class _BuildingAdCard extends StatelessWidget {
   final Map<String, dynamic> building;
   final User user;
   final String role;
+  final FeedViewModel viewModel;
   final bool showFullDetails;
 
   @override
@@ -327,7 +299,10 @@ class _BuildingAdCard extends StatelessWidget {
             ),
             if (showFullDetails) ...[
               const SizedBox(height: 12),
-              _RoomStatusBoard(buildingId: buildingId),
+              _RoomStatusBoard(
+                buildingId: buildingId,
+                viewModel: viewModel,
+              ),
               const SizedBox(height: 12),
               Text(
                 'Lien he: $phone - $email',
@@ -387,6 +362,7 @@ class _BuildingAdCard extends StatelessWidget {
               buildingId: buildingId,
               user: user,
               role: role,
+              viewModel: viewModel,
               showAll: showFullDetails,
               onShowMore: showFullDetails ? null : () => _openDetails(context),
             ),
@@ -404,46 +380,29 @@ class _BuildingAdCard extends StatelessWidget {
           building: building,
           user: user,
           role: role,
+          viewModel: viewModel,
         ),
       ),
     );
   }
 
   Future<void> _requestJoin(BuildContext context) async {
-    final adminId = (building['adminId'] ?? '').toString();
-    if (adminId.isEmpty) return;
-
-    final existing = await AppFirestoreService.joinRequests
-        .where('buildingId', isEqualTo: buildingId)
-        .where('requesterId', isEqualTo: user.uid)
-        .where('status', isEqualTo: JoinRequestStatus.pending)
-        .limit(1)
-        .get();
-
-    if (existing.docs.isNotEmpty) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ban da gui yeu cau truoc do.')),
-      );
-      return;
-    }
-
-    await AppFirestoreService.joinRequests.add({
-      'buildingId': buildingId,
-      'buildingName': building['name'] ?? '',
-      'adminId': adminId,
-      'requesterId': user.uid,
-      'requesterName': user.displayName ?? user.email ?? 'Nguoi dung',
-      'requesterEmail': user.email ?? '',
-      'requesterRole': role,
-      'status': JoinRequestStatus.pending,
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    final joined = await viewModel.requestJoin(
+      buildingId: buildingId,
+      building: building,
+      user: user,
+      role: role,
+    );
 
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Da gui yeu cau tham gia toa nha.')),
+      SnackBar(
+        content: Text(
+          joined
+              ? 'Da gui yeu cau tham gia toa nha.'
+              : viewModel.errorMessage ?? 'Khong gui duoc yeu cau.',
+        ),
+      ),
     );
   }
 
@@ -452,40 +411,25 @@ class _BuildingAdCard extends StatelessWidget {
     if (adminId.isEmpty) return;
 
     final title = 'Chat voi admin ${(building['adminName'] ?? '').toString()}';
-    final existing = await AppFirestoreService.chats
-        .where('type', isEqualTo: ChatType.private)
-        .where('memberIds', arrayContains: user.uid)
-        .get();
-
-    final found = existing.docs.where((doc) {
-      final data = doc.data();
-      if (data['isDeleted'] == true) return false;
-      final deletedFor = List<String>.from(data['deletedFor'] ?? []);
-      if (deletedFor.contains(user.uid)) return false;
-      final members = List<String>.from(data['memberIds'] ?? []);
-      return members.contains(adminId);
-    }).toList();
-
-    String chatId;
-    if (found.isEmpty) {
-      final chatDoc = await AppFirestoreService.chats.add({
-        'type': ChatType.private,
-        'buildingId': buildingId,
-        'ownerId': adminId,
-        'title': title,
-        'memberIds': [user.uid, adminId],
-        'deletedFor': [],
-        'isDeleted': false,
-        'lastMessage': '',
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-      chatId = chatDoc.id;
-    } else {
-      chatId = found.first.id;
-    }
+    final chatId = await viewModel.findOrCreatePrivateChat(
+      currentUser: user,
+      otherUserId: adminId,
+      otherUserName: (building['adminName'] ?? '').toString(),
+      buildingId: buildingId,
+      ownerId: adminId,
+      title: title,
+    );
 
     if (!context.mounted) return;
+    if (chatId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(viewModel.errorMessage ?? 'Khong mo duoc khung chat.'),
+        ),
+      );
+      return;
+    }
+
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ChatDetailScreen(
@@ -546,12 +490,14 @@ class _BuildingAdDetailScreen extends StatelessWidget {
     required this.building,
     required this.user,
     required this.role,
+    required this.viewModel,
   });
 
   final String buildingId;
   final Map<String, dynamic> building;
   final User user;
   final String role;
+  final FeedViewModel viewModel;
 
   @override
   Widget build(BuildContext context) {
@@ -574,6 +520,7 @@ class _BuildingAdDetailScreen extends StatelessWidget {
             building: building,
             user: user,
             role: role,
+            viewModel: viewModel,
             showFullDetails: true,
           ),
         ],
@@ -587,6 +534,7 @@ class _BuildingCommentsSection extends StatefulWidget {
     required this.buildingId,
     required this.user,
     required this.role,
+    required this.viewModel,
     required this.showAll,
     this.onShowMore,
   });
@@ -594,6 +542,7 @@ class _BuildingCommentsSection extends StatefulWidget {
   final String buildingId;
   final User user;
   final String role;
+  final FeedViewModel viewModel;
   final bool showAll;
   final VoidCallback? onShowMore;
 
@@ -604,7 +553,6 @@ class _BuildingCommentsSection extends StatefulWidget {
 
 class _BuildingCommentsSectionState extends State<_BuildingCommentsSection> {
   final _commentController = TextEditingController();
-  bool _isSending = false;
 
   @override
   void dispose() {
@@ -614,50 +562,30 @@ class _BuildingCommentsSectionState extends State<_BuildingCommentsSection> {
 
   Future<void> _sendComment() async {
     final text = _commentController.text.trim();
-    if (text.isEmpty || _isSending) return;
+    if (text.isEmpty || widget.viewModel.isLoading) return;
 
-    setState(() => _isSending = true);
+    final sent = await widget.viewModel.sendBuildingComment(
+      buildingId: widget.buildingId,
+      user: widget.user,
+      role: widget.role,
+      text: text,
+    );
+    if (!mounted) return;
 
-    try {
-      final authorName =
-          widget.user.displayName ?? widget.user.email ?? 'Nguoi dung';
-
-      await AppFirestoreService.buildingComments(widget.buildingId).add({
-        'authorId': widget.user.uid,
-        'authorName': authorName,
-        'authorEmail': widget.user.email ?? '',
-        'authorRole': widget.role,
-        'text': text,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
+    if (sent) {
       _commentController.clear();
-    } on FirebaseException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.code == 'permission-denied'
-                ? 'Firestore chua cap quyen binh luan quang cao.'
-                : e.message ?? 'Khong gui duoc binh luan.',
-          ),
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _isSending = false);
+      return;
     }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(_commentErrorMessage(widget.viewModel.errorMessage)),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    Query<Map<String, dynamic>> query = AppFirestoreService
-        .buildingComments(widget.buildingId)
-        .orderBy('createdAt', descending: true);
-
-    if (!widget.showAll) {
-      query = query.limit(1);
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -675,7 +603,10 @@ class _BuildingCommentsSectionState extends State<_BuildingCommentsSection> {
         ),
         const SizedBox(height: 8),
         StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: query.snapshots(),
+          stream: widget.viewModel.buildingComments(
+            buildingId: widget.buildingId,
+            showAll: widget.showAll,
+          ),
           builder: (context, snapshot) {
             if (snapshot.hasError) {
               return const Padding(
@@ -736,20 +667,33 @@ class _BuildingCommentsSectionState extends State<_BuildingCommentsSection> {
               ),
             ),
             const SizedBox(width: 8),
-            IconButton.filled(
-              onPressed: _isSending ? null : _sendComment,
-              icon: _isSending
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.send),
+            AnimatedBuilder(
+              animation: widget.viewModel,
+              builder: (context, _) {
+                return IconButton.filled(
+                  onPressed: widget.viewModel.isLoading ? null : _sendComment,
+                  icon: widget.viewModel.isLoading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.send),
+                );
+              },
             ),
           ],
         ),
       ],
     );
+  }
+
+  String _commentErrorMessage(String? errorMessage) {
+    if (errorMessage?.contains('permission-denied') == true) {
+      return 'Firestore chua cap quyen binh luan quang cao.';
+    }
+
+    return 'Khong gui duoc binh luan.';
   }
 }
 
@@ -787,16 +731,18 @@ class _CommentBubble extends StatelessWidget {
 }
 
 class _RoomStatusBoard extends StatelessWidget {
-  const _RoomStatusBoard({required this.buildingId});
+  const _RoomStatusBoard({
+    required this.buildingId,
+    required this.viewModel,
+  });
 
   final String buildingId;
+  final FeedViewModel viewModel;
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: AppFirestoreService.buildingRooms(buildingId)
-          .orderBy('roomNumber')
-          .snapshots(),
+      stream: viewModel.buildingRooms(buildingId),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const LinearProgressIndicator(minHeight: 2);
@@ -853,26 +799,25 @@ class _RoomStatusBoard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: rooms.map((doc) {
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: rooms.length,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: MediaQuery.of(context).size.width >= 560 ? 3 : 2,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+                childAspectRatio: 0.88,
+              ),
+              itemBuilder: (context, index) {
+                final doc = rooms[index];
                 final data = doc.data();
-                final name = (data['name'] ?? doc.id).toString();
-                final status = _statusFromRoom(data);
-                final color = _statusColor(status);
-
-                return OutlinedButton(
-                  onPressed: () {},
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: color,
-                    side: BorderSide(color: color.withValues(alpha: 0.45)),
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                  ),
-                  child: Text('$name - ${_statusLabel(status)}'),
+                return _FeedRoomAdTile(
+                  name: (data['name'] ?? doc.id).toString(),
+                  status: _statusFromRoom(data),
+                  coverImageUrl: (data['coverImageUrl'] ?? '').toString(),
                 );
-              }).toList(),
+              },
             ),
           ],
         );
@@ -915,16 +860,18 @@ class _UserDirectoryList extends StatelessWidget {
     required this.currentUser,
     required this.role,
     required this.query,
+    required this.viewModel,
   });
 
   final User currentUser;
   final String role;
   final String query;
+  final FeedViewModel viewModel;
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: AppFirestoreService.users.where('role', isEqualTo: role).snapshots(),
+      stream: viewModel.usersByRole(role),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return const _FeedEmptyState(
@@ -963,6 +910,7 @@ class _UserDirectoryList extends StatelessWidget {
               userId: doc.id,
               data: doc.data(),
               role: role,
+              viewModel: viewModel,
             );
           }).toList(),
         );
@@ -994,12 +942,14 @@ class _UserDirectoryCard extends StatelessWidget {
     required this.userId,
     required this.data,
     required this.role,
+    required this.viewModel,
   });
 
   final User currentUser;
   final String userId;
   final Map<String, dynamic> data;
   final String role;
+  final FeedViewModel viewModel;
 
   @override
   Widget build(BuildContext context) {
@@ -1020,18 +970,58 @@ class _UserDirectoryCard extends StatelessWidget {
             buildingId.isEmpty ? 'Chua tham gia toa nha' : 'Da tham gia toa nha',
           ].join(' - '),
         ),
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => _UserDirectoryProfileScreen(
-                currentUser: currentUser,
-                profileUserId: userId,
-                profile: data,
-                role: role,
-              ),
-            ),
-          );
-        },
+        onTap: () => _openProfile(context, name, email),
+      ),
+    );
+  }
+
+  void _openProfile(BuildContext context, String name, String email) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ProfileScreen(
+          user: currentUser,
+          roleLabel: UserRole.label(role),
+          avatarText: _initials(name, email),
+          avatarColor: _avatarColor(role),
+          avatarTextColor: _avatarTextColor(role),
+          profileUserId: userId,
+          initialProfile: data,
+          onChat: (profileContext) => _openChat(profileContext, name),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openChat(BuildContext context, String name) async {
+    if (viewModel.isLoading || userId == currentUser.uid) return;
+
+    final chatId = await viewModel.findOrCreatePrivateChat(
+      currentUser: currentUser,
+      otherUserId: userId,
+      otherUserName: name,
+    );
+
+    if (!context.mounted) return;
+    if (chatId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            viewModel.errorMessage?.contains('permission-denied') == true
+                ? 'Firestore chưa cấp quyền tạo chat riêng.'
+                : 'Không mở được khung chat.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChatDetailScreen(
+          chatId: chatId,
+          chatTitle: 'Chat với $name',
+          user: currentUser,
+        ),
       ),
     );
   }
@@ -1050,178 +1040,100 @@ class _UserDirectoryCard extends StatelessWidget {
     final initials = words.take(2).map((word) => word[0]).join();
     return initials.toUpperCase();
   }
+
+  static Color _avatarColor(String role) {
+    return switch (role) {
+      UserRole.manager => const Color(0xFFC8E6C9),
+      UserRole.admin => const Color(0xFFFFCCBC),
+      _ => const Color(0xFFBBDEFB),
+    };
+  }
+
+  static Color _avatarTextColor(String role) {
+    return switch (role) {
+      UserRole.manager => const Color(0xFF1B5E20),
+      UserRole.admin => const Color(0xFF5D4037),
+      _ => const Color(0xFF0D47A1),
+    };
+  }
 }
 
-class _UserDirectoryProfileScreen extends StatefulWidget {
-  const _UserDirectoryProfileScreen({
-    required this.currentUser,
-    required this.profileUserId,
-    required this.profile,
-    required this.role,
+class _FeedRoomAdTile extends StatelessWidget {
+  const _FeedRoomAdTile({
+    required this.name,
+    required this.status,
+    required this.coverImageUrl,
   });
 
-  final User currentUser;
-  final String profileUserId;
-  final Map<String, dynamic> profile;
-  final String role;
-
-  @override
-  State<_UserDirectoryProfileScreen> createState() =>
-      _UserDirectoryProfileScreenState();
-}
-
-class _UserDirectoryProfileScreenState
-    extends State<_UserDirectoryProfileScreen> {
-  bool _isOpeningChat = false;
-
-  Future<void> _openChat() async {
-    if (_isOpeningChat || widget.profileUserId == widget.currentUser.uid) return;
-
-    setState(() => _isOpeningChat = true);
-
-    try {
-      final chatId = await _findOrCreatePrivateChat(
-        currentUser: widget.currentUser,
-        otherUserId: widget.profileUserId,
-        otherUserName: _displayName(widget.profile),
-      );
-
-      if (!mounted) return;
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => ChatDetailScreen(
-            chatId: chatId,
-            chatTitle: 'Chat voi ${_displayName(widget.profile)}',
-            user: widget.currentUser,
-          ),
-        ),
-      );
-    } on FirebaseException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.code == 'permission-denied'
-                ? 'Firestore chua cap quyen tao chat rieng.'
-                : e.message ?? 'Khong mo duoc khung chat.',
-          ),
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _isOpeningChat = false);
-    }
-  }
+  final String name;
+  final String status;
+  final String coverImageUrl;
 
   @override
   Widget build(BuildContext context) {
-    final name = _displayName(widget.profile);
-    final email = (widget.profile['email'] ?? '').toString();
-    final buildingId = (widget.profile['buildingId'] ?? '').toString();
-    final isCurrentUser = widget.profileUserId == widget.currentUser.uid;
+    final color = _RoomStatusBoard._statusColor(status);
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Ho so tai khoan')),
-      body: ListView(
-        padding: const EdgeInsets.all(24),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Center(
-            child: CircleAvatar(
-              radius: 54,
-              backgroundColor: const Color(0xFFE0F2FE),
-              child: Text(
-                _initials(name, email),
-                style: const TextStyle(
-                  color: Color(0xFF2563EB),
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              child: coverImageUrl.isEmpty
+                  ? const _FeedRoomImagePlaceholder()
+                  : Image.network(
+                      coverImageUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) =>
+                          const _FeedRoomImagePlaceholder(),
+                    ),
             ),
           ),
-          const SizedBox(height: 18),
-          Text(
-            name,
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
+          Padding(
+            padding: const EdgeInsets.all(9),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            UserRole.label(widget.role),
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.black54),
-          ),
-          const SizedBox(height: 24),
-          _ProfileInfoTile(
-            icon: Icons.email_outlined,
-            label: 'Email',
-            value: email.isEmpty ? 'Chua co email' : email,
-          ),
-          const SizedBox(height: 10),
-          _ProfileInfoTile(
-            icon: Icons.apartment_outlined,
-            label: 'Trang thai toa nha',
-            value: buildingId.isEmpty ? 'Chua tham gia toa nha' : 'Da tham gia',
-          ),
-          const SizedBox(height: 24),
-          if (isCurrentUser)
-            const Center(child: Chip(label: Text('Tai khoan cua ban')))
-          else
-            FilledButton.icon(
-              onPressed: _isOpeningChat ? null : _openChat,
-              icon: _isOpeningChat
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.chat_bubble_outline),
-              label: const Text('Chat'),
+                const SizedBox(height: 4),
+                Text(
+                  _RoomStatusBoard._statusLabel(status),
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
+          ),
         ],
       ),
     );
   }
-
-  static String _displayName(Map<String, dynamic> data) {
-    final name = (data['name'] ?? data['displayName'] ?? '').toString().trim();
-    if (name.isNotEmpty) return name;
-    final email = (data['email'] ?? '').toString().trim();
-    return email.isEmpty ? 'Tai khoan' : email;
-  }
-
-  static String _initials(String name, String email) {
-    final source = name.trim().isNotEmpty ? name.trim() : email.trim();
-    if (source.isEmpty) return '?';
-    final words = source.split(RegExp(r'\s+')).where((part) => part.isNotEmpty);
-    final initials = words.take(2).map((word) => word[0]).join();
-    return initials.toUpperCase();
-  }
 }
 
-class _ProfileInfoTile extends StatelessWidget {
-  const _ProfileInfoTile({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
+class _FeedRoomImagePlaceholder extends StatelessWidget {
+  const _FeedRoomImagePlaceholder();
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: const BorderSide(color: Color(0xFFE5E7EB)),
+    return Container(
+      color: const Color(0xFFEFF6FF),
+      child: const Center(
+        child: Icon(Icons.image_outlined, color: Color(0xFF2563EB)),
       ),
-      leading: Icon(icon, color: Colors.blueAccent),
-      title: Text(label),
-      subtitle: Text(value),
     );
   }
 }

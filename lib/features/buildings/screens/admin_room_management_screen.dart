@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/services/app_firestore_service.dart';
+import '../view_models/admin_room_management_view_model.dart';
 
 class AdminRoomManagementScreen extends StatefulWidget {
   const AdminRoomManagementScreen({
@@ -24,19 +25,20 @@ class AdminRoomManagementScreen extends StatefulWidget {
 
 class _AdminRoomManagementScreenState extends State<AdminRoomManagementScreen> {
   final _searchController = TextEditingController();
-  String _query = '';
+  final _viewModel = AdminRoomManagementViewModel();
 
   @override
   void initState() {
     super.initState();
     _searchController.addListener(() {
-      setState(() => _query = _searchController.text.trim().toLowerCase());
+      _viewModel.setQuery(_searchController.text);
     });
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _viewModel.dispose();
     super.dispose();
   }
 
@@ -80,66 +82,72 @@ class _AdminRoomManagementScreenState extends State<AdminRoomManagementScreen> {
             ),
           ),
           Expanded(
-            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: AppFirestoreService.buildingRooms(widget.buildingId)
-                  .orderBy('roomNumber')
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Text(
-                        'Khong tai duoc danh sach phong. Hay kiem tra quyen doc buildings/{id}/rooms.',
-                        textAlign: TextAlign.center,
+            child: AnimatedBuilder(
+              animation: _viewModel,
+              builder: (context, _) {
+                return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream: _viewModel.rooms(widget.buildingId),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(24),
+                          child: Text(
+                            'Khong tai duoc danh sach phong. Hay kiem tra quyen doc buildings/{id}/rooms.',
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      );
+                    }
+
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    final rooms = (snapshot.data?.docs ?? [])
+                        .map((doc) => _RoomView.fromDoc(doc))
+                        .where(
+                          (room) => totalRooms <= 0 || room.number <= totalRooms,
+                        )
+                        .where(_matchesQuery)
+                        .toList();
+
+                    if ((snapshot.data?.docs ?? []).isEmpty) {
+                      return const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(24),
+                          child: Text(
+                            'Chua co phong nao. Hay vao Cai dat va bam Luu thiet lap de tao danh sach phong.',
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      );
+                    }
+
+                    if (rooms.isEmpty) {
+                      return const Center(
+                        child: Text('Khong tim thay phong phu hop.'),
+                      );
+                    }
+
+                    return GridView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        mainAxisSpacing: 12,
+                        crossAxisSpacing: 12,
+                        childAspectRatio: 0.98,
                       ),
-                    ),
-                  );
-                }
-
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                final rooms = (snapshot.data?.docs ?? [])
-                    .map((doc) => _RoomView.fromDoc(doc))
-                    .where((room) => totalRooms <= 0 || room.number <= totalRooms)
-                    .where(_matchesQuery)
-                    .toList();
-
-                if ((snapshot.data?.docs ?? []).isEmpty) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Text(
-                        'Chua co phong nao. Hay vao Cai dat va bam Luu thiet lap de tao danh sach phong.',
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  );
-                }
-
-                if (rooms.isEmpty) {
-                  return const Center(
-                    child: Text('Khong tim thay phong phu hop.'),
-                  );
-                }
-
-                return GridView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 12,
-                    crossAxisSpacing: 12,
-                    childAspectRatio: 0.98,
-                  ),
-                  itemCount: rooms.length,
-                  itemBuilder: (context, index) {
-                    return _RoomGridTile(
-                      room: rooms[index],
-                      buildingId: widget.buildingId,
-                      canEditRoom: widget.canEditRoom,
-                      canManageTenant: widget.canManageTenant,
+                      itemCount: rooms.length,
+                      itemBuilder: (context, index) {
+                        return _RoomGridTile(
+                          room: rooms[index],
+                          buildingId: widget.buildingId,
+                          canEditRoom: widget.canEditRoom,
+                          canManageTenant: widget.canManageTenant,
+                        );
+                      },
                     );
                   },
                 );
@@ -152,12 +160,13 @@ class _AdminRoomManagementScreenState extends State<AdminRoomManagementScreen> {
   }
 
   bool _matchesQuery(_RoomView room) {
-    if (_query.isEmpty) return true;
-    return room.name.toLowerCase().contains(_query) ||
-        room.number.toString().contains(_query) ||
-        room.floor.toString().contains(_query) ||
-        room.statusLabel.toLowerCase().contains(_query) ||
-        (room.tenantName ?? '').toLowerCase().contains(_query);
+    final query = _viewModel.query;
+    if (query.isEmpty) return true;
+    return room.name.toLowerCase().contains(query) ||
+        room.number.toString().contains(query) ||
+        room.floor.toString().contains(query) ||
+        room.statusLabel.toLowerCase().contains(query) ||
+        (room.tenantName ?? '').toLowerCase().contains(query);
   }
 }
 
@@ -301,9 +310,7 @@ class _RoomDetailScreenState extends State<_RoomDetailScreen> {
   final _areaController = TextEditingController();
   final _maxPeopleController = TextEditingController();
   final _typeController = TextEditingController();
-
-  String _status = 'available';
-  bool _isSaving = false;
+  final _viewModel = RoomDetailViewModel();
 
   static const _statusOptions = [
     DropdownMenuItem(value: 'available', child: Text('Phong trong')),
@@ -326,6 +333,7 @@ class _RoomDetailScreenState extends State<_RoomDetailScreen> {
     _areaController.dispose();
     _maxPeopleController.dispose();
     _typeController.dispose();
+    _viewModel.dispose();
     super.dispose();
   }
 
@@ -337,154 +345,167 @@ class _RoomDetailScreenState extends State<_RoomDetailScreen> {
     _maxPeopleController.text =
         room.maxPeople > 0 ? room.maxPeople.toString() : '';
     _typeController.text = room.type == 'standard' ? '' : room.type;
-    _status = _statusOptions.any((item) => item.value == room.status)
-        ? room.status
-        : 'available';
+    _viewModel.loadStatus(
+      status: room.status,
+      allowedStatuses: _statusOptions
+          .map((item) => item.value)
+          .whereType<String>(),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final roomRef =
-        AppFirestoreService.buildingRooms(widget.buildingId).doc(widget.room.id);
-
     return Scaffold(
       appBar: AppBar(title: const Text('Thong tin phong')),
-      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        stream: roomRef.snapshots(),
-        builder: (context, snapshot) {
-          final room = snapshot.data?.exists == true
-              ? _RoomView.fromSnapshot(snapshot.data!)
-              : widget.room;
+      body: AnimatedBuilder(
+        animation: _viewModel,
+        builder: (context, _) {
+          return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+            stream: _viewModel.room(
+              buildingId: widget.buildingId,
+              roomId: widget.room.id,
+            ),
+            builder: (context, snapshot) {
+              final room = snapshot.data?.exists == true
+                  ? _RoomView.fromSnapshot(snapshot.data!)
+                  : widget.room;
 
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              _RoomHeaderCard(room: room),
-              const SizedBox(height: 16),
-              _RoomEditSection(
-                title: 'Thong tin phong',
+              return ListView(
+                padding: const EdgeInsets.all(16),
                 children: [
-                  _buildTextField(_nameController, 'Ten phong'),
-                  Row(
+                  _RoomHeaderCard(room: room),
+                  const SizedBox(height: 16),
+                  _RoomEditSection(
+                    title: 'Thong tin phong',
                     children: [
-                      Expanded(
-                        child: _buildTextField(
-                          _floorController,
-                          'Tang',
-                          keyboardType: TextInputType.number,
+                      _buildTextField(_nameController, 'Ten phong'),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildTextField(
+                              _floorController,
+                              'Tang',
+                              keyboardType: TextInputType.number,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildTextField(
+                              _areaController,
+                              'Dien tich (m2)',
+                              keyboardType: TextInputType.number,
+                            ),
+                          ),
+                        ],
+                      ),
+                      _buildTextField(
+                        _rentController,
+                        'Tien thue',
+                        keyboardType: TextInputType.number,
+                      ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildTextField(
+                              _maxPeopleController,
+                              'So nguoi toi da',
+                              keyboardType: TextInputType.number,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildTextField(
+                              _typeController,
+                              'Loai phong',
+                              hintText: 'standard',
+                            ),
+                          ),
+                        ],
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: DropdownButtonFormField<String>(
+                          initialValue: _viewModel.status,
+                          decoration: const InputDecoration(
+                            labelText: 'Trang thai',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: _statusOptions,
+                          onChanged: widget.canEditRoom
+                              ? (value) {
+                                  if (value != null) {
+                                    _viewModel.setStatus(value);
+                                  }
+                                }
+                              : null,
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildTextField(
-                          _areaController,
-                          'Dien tich (m2)',
-                          keyboardType: TextInputType.number,
+                      if (widget.canEditRoom)
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: _viewModel.isLoading
+                                ? null
+                                : () => _saveRoom(room),
+                            icon: _viewModel.isLoading
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.save_outlined),
+                            label: const Text('Luu thong tin phong'),
+                          ),
                         ),
-                      ),
                     ],
                   ),
-                  _buildTextField(
-                    _rentController,
-                    'Tien thue',
-                    keyboardType: TextInputType.number,
-                  ),
-                  Row(
+                  const SizedBox(height: 16),
+                  _RoomEditSection(
+                    title: 'Nguoi thue',
                     children: [
-                      Expanded(
-                        child: _buildTextField(
-                          _maxPeopleController,
-                          'So nguoi toi da',
-                          keyboardType: TextInputType.number,
-                        ),
+                      _RoomInfoRow(
+                        label: 'Ten',
+                        value: room.tenantName?.isNotEmpty == true
+                            ? room.tenantName!
+                            : 'Chua co',
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildTextField(
-                          _typeController,
-                          'Loai phong',
-                          hintText: 'standard',
+                      if (room.tenantEmail?.isNotEmpty == true)
+                        _RoomInfoRow(label: 'Email', value: room.tenantEmail!),
+                      if (widget.canManageTenant) ...[
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: () => _showTenantPicker(room),
+                            icon: const Icon(Icons.person_add_alt_1_outlined),
+                            label: Text(
+                              room.tenantId?.isNotEmpty == true
+                                  ? 'Doi nguoi thue'
+                                  : 'Them nguoi thue',
+                            ),
+                          ),
                         ),
-                      ),
+                        if (room.tenantId?.isNotEmpty == true) ...[
+                          const SizedBox(height: 10),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: _viewModel.isLoading
+                                  ? null
+                                  : () => _confirmRemoveTenant(room),
+                              icon: const Icon(Icons.person_remove_outlined),
+                              label: const Text('Xoa nguoi thue khoi phong'),
+                            ),
+                          ),
+                        ],
+                      ],
                     ],
                   ),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _status,
-                      decoration: const InputDecoration(
-                        labelText: 'Trang thai',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: _statusOptions,
-                      onChanged: widget.canEditRoom
-                          ? (value) {
-                              if (value != null) {
-                                setState(() => _status = value);
-                              }
-                            }
-                          : null,
-                    ),
-                  ),
-                  if (widget.canEditRoom)
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: _isSaving ? null : () => _saveRoom(room),
-                        icon: _isSaving
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.save_outlined),
-                        label: const Text('Luu thong tin phong'),
-                      ),
-                    ),
                 ],
-              ),
-              const SizedBox(height: 16),
-              _RoomEditSection(
-                title: 'Nguoi thue',
-                children: [
-                  _RoomInfoRow(
-                    label: 'Ten',
-                    value: room.tenantName?.isNotEmpty == true
-                        ? room.tenantName!
-                        : 'Chua co',
-                  ),
-                  if (room.tenantEmail?.isNotEmpty == true)
-                    _RoomInfoRow(label: 'Email', value: room.tenantEmail!),
-                  if (widget.canManageTenant) ...[
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: () => _showTenantPicker(room),
-                        icon: const Icon(Icons.person_add_alt_1_outlined),
-                        label: Text(
-                          room.tenantId?.isNotEmpty == true
-                              ? 'Doi nguoi thue'
-                              : 'Them nguoi thue',
-                        ),
-                      ),
-                    ),
-                    if (room.tenantId?.isNotEmpty == true) ...[
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: () => _confirmRemoveTenant(room),
-                          icon: const Icon(Icons.person_remove_outlined),
-                          label: const Text('Xoa nguoi thue khoi phong'),
-                        ),
-                      ),
-                    ],
-                  ],
-                ],
-              ),
-            ],
+              );
+            },
           );
         },
       ),
@@ -519,52 +540,33 @@ class _RoomDetailScreenState extends State<_RoomDetailScreen> {
       return;
     }
 
-    setState(() => _isSaving = true);
-
-    final tenantUserId = room.tenantId;
-    final hasTenant = tenantUserId != null && tenantUserId.isNotEmpty;
-    final statusToSave = hasTenant && _status == 'available'
-        ? 'occupied'
-        : _status;
     final type = _typeController.text.trim().isEmpty
         ? 'standard'
         : _typeController.text.trim();
 
-    try {
-      final batch = AppFirestoreService.db.batch();
-      final roomRef =
-          AppFirestoreService.buildingRooms(widget.buildingId).doc(room.id);
+    final saved = await _viewModel.saveRoom(
+      buildingId: widget.buildingId,
+      roomId: room.id,
+      roomName: roomName,
+      roomNumber: room.number,
+      floor: _readInt(_floorController),
+      rent: _readInt(_rentController),
+      area: _readInt(_areaController),
+      maxPeople: _readInt(_maxPeopleController),
+      type: type,
+      status: _viewModel.status,
+      tenantUserId: room.tenantId,
+    );
 
-      batch.update(roomRef, {
-        'name': roomName,
-        'floor': _readInt(_floorController),
-        'rent': _readInt(_rentController),
-        'area': _readInt(_areaController),
-        'maxPeople': _readInt(_maxPeopleController),
-        'type': type,
-        'status': statusToSave,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      if (hasTenant) {
-        batch.update(AppFirestoreService.users.doc(tenantUserId), {
-          'roomName': roomName,
-          'roomNumber': room.number,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-      }
-
-      await batch.commit();
-      _showSnack('Da luu thong tin phong.');
-    } on FirebaseException catch (e) {
-      _showSnack(
-        e.code == 'permission-denied'
-            ? 'Firestore chua cap quyen cap nhat phong.'
-            : e.message ?? 'Khong luu duoc thong tin phong.',
-      );
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
-    }
+    _showSnack(
+      saved
+          ? 'Da luu thong tin phong.'
+          : _roomActionErrorMessage(
+              _viewModel.errorMessage,
+              permissionMessage: 'Firestore chua cap quyen cap nhat phong.',
+              fallbackMessage: 'Khong luu duoc thong tin phong.',
+            ),
+    );
   }
 
   void _showTenantPicker(_RoomView room) {
@@ -614,40 +616,22 @@ class _RoomDetailScreenState extends State<_RoomDetailScreen> {
     final tenantId = room.tenantId;
     if (tenantId == null || tenantId.isEmpty) return;
 
-    final roomRef = AppFirestoreService.buildingRooms(widget.buildingId)
-        .doc(room.id);
-    final tenantRef = AppFirestoreService.users.doc(tenantId);
+    final removed = await _viewModel.removeTenant(
+      buildingId: widget.buildingId,
+      roomId: room.id,
+      tenantId: tenantId,
+    );
 
-    try {
-      await AppFirestoreService.db.runTransaction((transaction) async {
-        final tenantSnapshot = await transaction.get(tenantRef);
-
-        transaction.update(roomRef, {
-          'tenantId': FieldValue.delete(),
-          'tenantName': FieldValue.delete(),
-          'tenantEmail': FieldValue.delete(),
-          'status': 'available',
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-
-        if (tenantSnapshot.exists) {
-          transaction.update(tenantRef, {
-            'roomId': FieldValue.delete(),
-            'roomNumber': FieldValue.delete(),
-            'roomName': FieldValue.delete(),
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-        }
-      });
-
-      _showSnack('Da xoa nguoi thue khoi ${room.name}.');
-    } on FirebaseException catch (e) {
-      _showSnack(
-        e.code == 'permission-denied'
-            ? 'Firestore chua cap quyen xoa nguoi thue khoi phong.'
-            : e.message ?? 'Khong xoa duoc nguoi thue khoi phong.',
-      );
-    }
+    _showSnack(
+      removed
+          ? 'Da xoa nguoi thue khoi ${room.name}.'
+          : _roomActionErrorMessage(
+              _viewModel.errorMessage,
+              permissionMessage:
+                  'Firestore chua cap quyen xoa nguoi thue khoi phong.',
+              fallbackMessage: 'Khong xoa duoc nguoi thue khoi phong.',
+            ),
+    );
   }
 
   int _readInt(TextEditingController controller) {
@@ -660,6 +644,18 @@ class _RoomDetailScreenState extends State<_RoomDetailScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
     );
+  }
+
+  String _roomActionErrorMessage(
+    String? errorMessage, {
+    required String permissionMessage,
+    required String fallbackMessage,
+  }) {
+    if (errorMessage?.contains('permission-denied') == true) {
+      return permissionMessage;
+    }
+
+    return fallbackMessage;
   }
 }
 
@@ -876,115 +872,128 @@ class _TenantPickerSheet extends StatefulWidget {
 }
 
 class _TenantPickerSheetState extends State<_TenantPickerSheet> {
-  bool _isSaving = false;
+  final _viewModel = TenantPickerViewModel();
+
+  @override
+  void dispose() {
+    _viewModel.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: EdgeInsets.only(
-          left: 16,
-          right: 16,
-          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-        ),
-        child: SizedBox(
-          height: MediaQuery.of(context).size.height * 0.68,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Them nguoi thue',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Chon tai khoan nguoi thue cho ${widget.room.name}.',
-                style: const TextStyle(color: Colors.black54),
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                  stream: AppFirestoreService.users
-                      .where('buildingId', isEqualTo: widget.buildingId)
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    if (snapshot.hasError) {
-                      return const Center(
-                        child: Text(
-                          'Khong tai duoc danh sach nguoi thue trong toa nha.',
-                          textAlign: TextAlign.center,
+    return AnimatedBuilder(
+      animation: _viewModel,
+      builder: (context, _) {
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+            ),
+            child: SizedBox(
+              height: MediaQuery.of(context).size.height * 0.68,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Them nguoi thue',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
                         ),
-                      );
-                    }
-
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-
-                    final tenants = (snapshot.data?.docs ?? [])
-                        .where(_canAssignToRoom)
-                        .toList();
-
-                    if (tenants.isEmpty) {
-                      return const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(24),
-                          child: Text(
-                            'Chua co nguoi thue nao dang trong toa nha va chua co phong.',
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      );
-                    }
-
-                    return ListView.separated(
-                      itemCount: tenants.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 8),
-                      itemBuilder: (context, index) {
-                        final doc = tenants[index];
-                        final data = doc.data();
-                        final name = _displayName(data);
-                        final email = (data['email'] ?? '').toString();
-                        final isCurrentTenant = doc.id == widget.room.tenantId;
-
-                        return Card(
-                          elevation: 1,
-                          child: ListTile(
-                            leading: CircleAvatar(
-                              child: Text(_initials(name, email)),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Chon tai khoan nguoi thue cho ${widget.room.name}.',
+                    style: const TextStyle(color: Colors.black54),
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                      stream: _viewModel.buildingUsers(widget.buildingId),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasError) {
+                          return const Center(
+                            child: Text(
+                              'Khong tai duoc danh sach nguoi thue trong toa nha.',
+                              textAlign: TextAlign.center,
                             ),
-                            title: Text(name),
-                            subtitle: Text(
-                              email.isEmpty
-                                  ? (isCurrentTenant
-                                      ? 'Dang o phong nay'
-                                      : 'Chua co phong')
-                                  : email,
+                          );
+                        }
+
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
+
+                        final tenants = (snapshot.data?.docs ?? [])
+                            .where(_canAssignToRoom)
+                            .toList();
+
+                        if (tenants.isEmpty) {
+                          return const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(24),
+                              child: Text(
+                                'Chua co nguoi thue nao dang trong toa nha va chua co phong.',
+                                textAlign: TextAlign.center,
+                              ),
                             ),
-                            trailing: isCurrentTenant
-                                ? const Icon(
-                                    Icons.check_circle,
-                                    color: Colors.green,
-                                  )
-                                : const Icon(Icons.chevron_right),
-                            enabled: !_isSaving,
-                            onTap: isCurrentTenant
-                                ? null
-                                : () => _assignTenant(doc),
-                          ),
+                          );
+                        }
+
+                        return ListView.separated(
+                          itemCount: tenants.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 8),
+                          itemBuilder: (context, index) {
+                            final doc = tenants[index];
+                            final data = doc.data();
+                            final name = _displayName(data);
+                            final email = (data['email'] ?? '').toString();
+                            final isCurrentTenant =
+                                doc.id == widget.room.tenantId;
+
+                            return Card(
+                              elevation: 1,
+                              child: ListTile(
+                                leading: CircleAvatar(
+                                  child: Text(_initials(name, email)),
+                                ),
+                                title: Text(name),
+                                subtitle: Text(
+                                  email.isEmpty
+                                      ? (isCurrentTenant
+                                          ? 'Dang o phong nay'
+                                          : 'Chua co phong')
+                                      : email,
+                                ),
+                                trailing: isCurrentTenant
+                                    ? const Icon(
+                                        Icons.check_circle,
+                                        color: Colors.green,
+                                      )
+                                    : const Icon(Icons.chevron_right),
+                                enabled: !_viewModel.isLoading,
+                                onTap: isCurrentTenant
+                                    ? null
+                                    : () => _assignTenant(doc),
+                              ),
+                            );
+                          },
                         );
                       },
-                    );
-                  },
-                ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -1001,68 +1010,34 @@ class _TenantPickerSheetState extends State<_TenantPickerSheet> {
   Future<void> _assignTenant(
     QueryDocumentSnapshot<Map<String, dynamic>> tenantDoc,
   ) async {
-    setState(() => _isSaving = true);
-
     final tenant = tenantDoc.data();
     final tenantName = _displayName(tenant);
     final tenantEmail = (tenant['email'] ?? '').toString();
-    final roomRef = AppFirestoreService.buildingRooms(widget.buildingId)
-        .doc(widget.room.id);
-    final tenantRef = AppFirestoreService.users.doc(tenantDoc.id);
 
-    try {
-      await AppFirestoreService.db.runTransaction((transaction) async {
-        final roomSnapshot = await transaction.get(roomRef);
-        final currentTenantId =
-            roomSnapshot.data()?['tenantId']?.toString() ?? widget.room.tenantId;
+    final assigned = await _viewModel.assignTenant(
+      buildingId: widget.buildingId,
+      roomId: widget.room.id,
+      roomNumber: widget.room.number,
+      roomName: widget.room.name,
+      currentTenantId: widget.room.tenantId,
+      tenantId: tenantDoc.id,
+      tenantName: tenantName,
+      tenantEmail: tenantEmail,
+    );
 
-        transaction.update(roomRef, {
-          'tenantId': tenantDoc.id,
-          'tenantName': tenantName,
-          'tenantEmail': tenantEmail,
-          'status': 'occupied',
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-
-        if (currentTenantId != null &&
-            currentTenantId.isNotEmpty &&
-            currentTenantId != tenantDoc.id) {
-          transaction.update(AppFirestoreService.users.doc(currentTenantId), {
-            'roomId': FieldValue.delete(),
-            'roomNumber': FieldValue.delete(),
-            'roomName': FieldValue.delete(),
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-        }
-
-        transaction.update(tenantRef, {
-          'buildingId': widget.buildingId,
-          'roomId': widget.room.id,
-          'roomNumber': widget.room.number,
-          'roomName': widget.room.name,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-      });
-
+    if (assigned) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Da them $tenantName vao ${widget.room.name}.')),
       );
       Navigator.of(context).pop();
-    } on FirebaseException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.code == 'permission-denied'
-                ? 'Firestore chua cap quyen gan nguoi thue vao phong.'
-                : e.message ?? 'Khong them duoc nguoi thue.',
-          ),
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
+      return;
     }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(_assignTenantErrorMessage())),
+    );
   }
 
   String _displayName(Map<String, dynamic> data) {
@@ -1076,5 +1051,13 @@ class _TenantPickerSheetState extends State<_TenantPickerSheet> {
     final source = name.trim().isNotEmpty ? name.trim() : email.trim();
     if (source.isEmpty) return '?';
     return source.substring(0, 1).toUpperCase();
+  }
+
+  String _assignTenantErrorMessage() {
+    if (_viewModel.errorMessage?.contains('permission-denied') == true) {
+      return 'Firestore chua cap quyen gan nguoi thue vao phong.';
+    }
+
+    return 'Khong them duoc nguoi thue.';
   }
 }
