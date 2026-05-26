@@ -116,6 +116,10 @@ class AdminSettingsViewModel extends BaseViewModel {
     );
   }
 
+  Future<Map<String, dynamic>> resolveBuildingLocation(String address) {
+    return _settingsRepository.resolveBuildingLocation(address);
+  }
+
   Future<Map<String, dynamic>?> loadPayosSettings({
     required String backendBaseUrl,
     required String idToken,

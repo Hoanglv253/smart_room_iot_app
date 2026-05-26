@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/widgets/building_map_preview.dart';
 import '../view_models/tenant_room_view_model.dart';
 import 'tenant_invoice_screen.dart';
 
@@ -395,6 +396,8 @@ class _TenantRoomInfoScreenState extends State<_TenantRoomInfoScreen> {
                 ],
               ),
               const SizedBox(height: 12),
+              BuildingMapPreview(building: widget.building),
+              const SizedBox(height: 12),
               _InfoSection(
                 title: 'Nguoi dang o',
                 children: [
@@ -432,6 +435,7 @@ class _TenantRoomInfoScreenState extends State<_TenantRoomInfoScreen> {
       _ => 'Phong trong',
     };
   }
+
 }
 
 class _RoomInfoHeader extends StatelessWidget {

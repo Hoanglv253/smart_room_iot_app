@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/services/app_firestore_service.dart';
+import '../../../core/services/map_service.dart';
+import '../../../core/widgets/building_map_preview.dart';
 import '../../messages/screens/chat_detail_screen.dart';
 import '../../profile/screens/profile_screen.dart';
 import '../view_models/feed_view_model.dart';
@@ -220,6 +222,7 @@ class _BuildingAdCard extends StatelessWidget {
     final defaultRent = _readInt(building['defaultRent']);
     final adminId = (building['adminId'] ?? '').toString();
     final isOwnBuilding = adminId == user.uid;
+    final canOpenDirections = MapService.canOpenDirections(building);
 
     return Card(
       elevation: 1,
@@ -308,6 +311,18 @@ class _BuildingAdCard extends StatelessWidget {
                 'Lien he: $phone - $email',
                 style: const TextStyle(color: Colors.black54),
               ),
+            ],
+            if (canOpenDirections && !showFullDetails) ...[
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () => _openDirections(context),
+                icon: const Icon(Icons.directions_outlined),
+                label: const Text('Chi duong'),
+              ),
+            ],
+            if (showFullDetails) ...[
+              const SizedBox(height: 12),
+              BuildingMapPreview(building: building),
             ],
             const SizedBox(height: 12),
             if (!showFullDetails)
@@ -438,6 +453,15 @@ class _BuildingAdCard extends StatelessWidget {
           user: user,
         ),
       ),
+    );
+  }
+
+  Future<void> _openDirections(BuildContext context) async {
+    final opened = await MapService.openDirectionsForBuilding(building);
+    if (!context.mounted || opened) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Khong mo duoc Google Maps.')),
     );
   }
 

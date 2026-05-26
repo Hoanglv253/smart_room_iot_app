@@ -681,6 +681,7 @@ class _PaymentInstructionSection extends StatelessWidget {
         final building = snapshot.data!;
         final settings = _readMap(building['paymentSettings']);
         final bankName = _text(settings['bankName'], 'Chua thiet lap');
+        final bankId = _text(settings['bankId'], '');
         final accountNumber =
             _text(settings['bankAccountNumber'], 'Chua thiet lap');
         final accountHolder =
@@ -689,18 +690,133 @@ class _PaymentInstructionSection extends StatelessWidget {
           settings['transferContentTemplate'],
           invoice,
         );
+        final amount = _readInt(invoice['totalAmount']);
+        final canCreateVietQr = bankId.isNotEmpty &&
+            accountNumber != 'Chua thiet lap' &&
+            accountHolder != 'Chua thiet lap' &&
+            amount > 0;
 
         return _TenantInvoiceSection(
           title: 'Huong dan thanh toan',
           children: [
             _InfoRow(label: 'Ngan hang', value: bankName),
+            if (bankId.isNotEmpty) _InfoRow(label: 'Ma VietQR', value: bankId),
             _InfoRow(label: 'So tai khoan', value: accountNumber),
             _InfoRow(label: 'Chu tai khoan', value: accountHolder),
-            _InfoRow(label: 'So tien', value: _money(invoice['totalAmount'])),
+            _InfoRow(label: 'So tien', value: _money(amount)),
             _InfoRow(label: 'Noi dung', value: transferContent),
+            const SizedBox(height: 12),
+            if (canCreateVietQr)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FilledButton.icon(
+                  onPressed: () {
+                    _showVietQrDialog(
+                      context: context,
+                      bankId: bankId,
+                      accountNumber: accountNumber,
+                      accountHolder: accountHolder,
+                      amount: amount,
+                      transferContent: transferContent,
+                    );
+                  },
+                  icon: const Icon(Icons.qr_code_2_outlined),
+                  label: const Text('Tao ma QR VietQR'),
+                ),
+              )
+            else
+              const _VietQrMissingNotice(),
           ],
         );
       },
+    );
+  }
+
+  void _showVietQrDialog({
+    required BuildContext context,
+    required String bankId,
+    required String accountNumber,
+    required String accountHolder,
+    required int amount,
+    required String transferContent,
+  }) {
+    final url = _vietQrUrl(
+      bankId: bankId,
+      accountNumber: accountNumber,
+      accountHolder: accountHolder,
+      amount: amount,
+      transferContent: transferContent,
+    );
+
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Ma QR VietQR'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(
+                    url,
+                    width: 260,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Text(
+                          'Khong tai duoc ma QR. Hay kiem tra ma ngan hang VietQR.',
+                          textAlign: TextAlign.center,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _InfoRow(label: 'So tien', value: _money(amount)),
+                _InfoRow(label: 'Noi dung', value: transferContent),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Dong'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _VietQrMissingNotice extends StatelessWidget {
+  const _VietQrMissingNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blueAccent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.22)),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline, color: Colors.blueAccent, size: 20),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Admin can nhap ma ngan hang VietQR, so tai khoan va chu tai khoan de tao QR.',
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -934,6 +1050,28 @@ String _transferContent(Object? template, Map<String, dynamic> invoice) {
       .replaceAll('{month}', month.toString())
       .replaceAll('{year}', year.toString())
       .replaceAll('{name}', tenantName);
+}
+
+String _vietQrUrl({
+  required String bankId,
+  required String accountNumber,
+  required String accountHolder,
+  required int amount,
+  required String transferContent,
+}) {
+  final compactBankId = bankId.trim();
+  final compactAccountNumber = accountNumber.trim().replaceAll(' ', '');
+  final query = <String, String>{
+    'amount': amount.toString(),
+    'addInfo': transferContent,
+    'accountName': accountHolder,
+  };
+
+  return Uri.https(
+    'img.vietqr.io',
+    '/image/$compactBankId-$compactAccountNumber-compact2.png',
+    query,
+  ).toString();
 }
 
 int _readInt(Object? value) {

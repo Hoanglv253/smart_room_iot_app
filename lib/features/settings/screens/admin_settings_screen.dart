@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../view_models/admin_settings_view_model.dart';
 import 'admin_ad_settings_screen.dart';
+import 'building_location_picker_screen.dart';
 
 const _payosBackendBaseUrl = String.fromEnvironment(
   'PAYOS_BACKEND_URL',
@@ -36,6 +37,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   final _billCloseDayController = TextEditingController();
   final _billDueDayController = TextEditingController();
   final _bankNameController = TextEditingController();
+  final _bankIdController = TextEditingController();
   final _bankAccountNumberController = TextEditingController();
   final _bankAccountHolderController = TextEditingController();
   final _transferContentController = TextEditingController();
@@ -52,6 +54,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   bool _isSaving = false;
   bool _isPayosSaving = false;
   bool _isPayosConfigured = false;
+  Map<String, dynamic> _selectedLocation = {};
 
   bool _wifi = true;
   bool _elevator = false;
@@ -95,6 +98,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     _billCloseDayController.dispose();
     _billDueDayController.dispose();
     _bankNameController.dispose();
+    _bankIdController.dispose();
     _bankAccountNumberController.dispose();
     _bankAccountHolderController.dispose();
     _transferContentController.dispose();
@@ -143,6 +147,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     final paymentSettings = _readMap(data['paymentSettings']);
 
     _buildingId = buildingId;
+    _selectedLocation = _readMap(data['location']);
     _setText(_nameController, data['name']);
     _setText(_addressController, data['address']);
     _setText(_descriptionController, data['description']);
@@ -160,6 +165,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     _setText(_billCloseDayController, data['billCloseDay']);
     _setText(_billDueDayController, data['billDueDay']);
     _setText(_bankNameController, paymentSettings['bankName']);
+    _setText(_bankIdController, paymentSettings['bankId']);
     _setText(
       _bankAccountNumberController,
       paymentSettings['bankAccountNumber'],
@@ -345,6 +351,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     }
 
     setState(() => _isSaving = true);
+    final location = await _locationForSave();
+    if (!mounted) return;
 
     final result = await _viewModel.saveBuilding(
       buildingId: _buildingId,
@@ -354,6 +362,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         roomsPerFloor: roomsPerFloor,
         totalRooms: totalRooms,
         defaultRent: defaultRent,
+        location: location,
       ),
       userId: widget.user.uid,
       buildingName: buildingName,
@@ -374,12 +383,37 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     if (mounted) setState(() => _isSaving = false);
   }
 
+  Future<Map<String, dynamic>> _locationForSave() async {
+    final selectedLat = _readDouble(_selectedLocation['lat']);
+    final selectedLng = _readDouble(_selectedLocation['lng']);
+    final address = _addressController.text.trim();
+
+    if (selectedLat != null && selectedLng != null) {
+      final formattedAddress =
+          _selectedLocation['formattedAddress']?.toString().trim() ?? '';
+
+      return {
+        ..._selectedLocation,
+        'address': address,
+        'formattedAddress': formattedAddress.isEmpty
+            ? address
+            : formattedAddress,
+        'lat': selectedLat,
+        'lng': selectedLng,
+        'source': _selectedLocation['source'] ?? 'manual_map_picker',
+      };
+    }
+
+    return _viewModel.resolveBuildingLocation(address);
+  }
+
   Map<String, dynamic> _buildingData({
     required String buildingName,
     required int floorCount,
     required int roomsPerFloor,
     required int totalRooms,
     required int defaultRent,
+    required Map<String, dynamic> location,
   }) {
     return {
       'adminId': widget.user.uid,
@@ -389,6 +423,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       'description': _descriptionController.text.trim(),
       'phone': _phoneController.text.trim(),
       'email': _emailController.text.trim(),
+      'location': location,
       'floorCount': floorCount,
       'roomsPerFloor': roomsPerFloor,
       'totalRooms': totalRooms,
@@ -424,6 +459,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       },
       'paymentSettings': {
         'bankName': _bankNameController.text.trim(),
+        'bankId': _bankIdController.text.trim(),
         'bankAccountNumber': _bankAccountNumberController.text.trim(),
         'bankAccountHolder': _bankAccountHolderController.text.trim(),
         'transferContentTemplate': _transferContentController.text.trim(),
@@ -494,6 +530,25 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     );
   }
 
+  Future<void> _openLocationPicker() async {
+    final result = await Navigator.of(context).push<Map<String, dynamic>>(
+      MaterialPageRoute(
+        builder: (_) => BuildingLocationPickerScreen(
+          initialAddress: _addressController.text,
+          initialLocation: _selectedLocation,
+        ),
+      ),
+    );
+
+    if (!mounted || result == null) return;
+
+    final address = result['address']?.toString().trim() ?? '';
+    setState(() {
+      _selectedLocation = result;
+      if (address.isNotEmpty) _addressController.text = address;
+    });
+  }
+
   void _setText(TextEditingController controller, Object? value) {
     controller.text = value?.toString() ?? '';
   }
@@ -501,6 +556,11 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   int _readInt(TextEditingController controller) {
     final raw = controller.text.trim().replaceAll('.', '').replaceAll(',', '');
     return int.tryParse(raw) ?? 0;
+  }
+
+  double? _readDouble(Object? value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '');
   }
 
   bool _readBool(Object? value, {required bool fallback}) {
@@ -551,7 +611,15 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           title: 'Thong tin chung',
           children: [
             _buildTextField(_nameController, 'Ten toa nha'),
-            _buildTextField(_addressController, 'Dia chi toa nha'),
+            _buildTextField(
+              _addressController,
+              'Dia chi toa nha',
+              helperText: 'Dung cho Google Maps va chi duong.',
+            ),
+            _LocationPickerButton(
+              location: _selectedLocation,
+              onPressed: _openLocationPicker,
+            ),
             _buildTextField(
               _descriptionController,
               'Mo ta ngan',
@@ -653,6 +721,11 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           title: 'Thong tin chuyen khoan',
           children: [
             _buildTextField(_bankNameController, 'Ten ngan hang'),
+            _buildTextField(
+              _bankIdController,
+              'Ma ngan hang VietQR',
+              helperText: 'Nhap BIN hoac code ngan hang, vi du MB, VCB, 970436.',
+            ),
             _buildTextField(
               _bankAccountNumberController,
               'So tai khoan',
@@ -855,6 +928,53 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       value: value,
       onChanged: onChanged,
     );
+  }
+}
+
+class _LocationPickerButton extends StatelessWidget {
+  const _LocationPickerButton({
+    required this.location,
+    required this.onPressed,
+  });
+
+  final Map<String, dynamic> location;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final lat = _readDouble(location['lat']);
+    final lng = _readDouble(location['lng']);
+    final hasLocation = lat != null && lng != null;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          OutlinedButton.icon(
+            onPressed: onPressed,
+            icon: const Icon(Icons.add_location_alt_outlined),
+            label: Text(
+              hasLocation ? 'Doi vi tri tren ban do' : 'Chon tren ban do',
+            ),
+          ),
+          if (hasLocation) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Toa do da chon: ${lat.toStringAsFixed(6)}, ${lng.toStringAsFixed(6)}',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.black54,
+                  ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  static double? _readDouble(Object? value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '');
   }
 }
 
