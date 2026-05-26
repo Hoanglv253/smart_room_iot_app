@@ -1,9 +1,9 @@
-# PayOS Backend
+# PayOS Backend Khong Can Blaze
 
 Backend nay tao link thanh toan PayOS va nhan webhook PayOS de tu dong doi hoa don sang `paid`.
-Co the chay bang Firebase Functions khi du an da len Blaze, hoac chay rieng tren Render/Railway/VPS.
+Neu khong nang Firebase len Blaze, deploy backend nay len Render/Railway/VPS va cho PayOS goi webhook ve backend do.
 
-## Cai dat local
+## Chay local
 
 ```bash
 cd functions
@@ -12,20 +12,22 @@ copy .env.example .env
 npm start
 ```
 
+Khi chay tren dien thoai that, `localhost` cua dien thoai khong phai may tinh.
+Muon test local thi dung mot URL public tam thoi nhu ngrok/cloudflared, roi cau hinh PayOS webhook vao URL do.
+
 ## Bien moi truong can co
 
 ```text
 PORT=8080
-APP_PUBLIC_URL=https://example.com
 PAYOS_CLIENT_ID=...
 PAYOS_API_KEY=...
 PAYOS_CHECKSUM_KEY=...
 FIREBASE_SERVICE_ACCOUNT_BASE64=...
 ```
 
-Khi deploy Firebase Functions tren Blaze, chi can 3 secret PayOS. Firebase Admin SDK tu dung quyen cua Functions, khong can `FIREBASE_SERVICE_ACCOUNT_BASE64`.
+`FIREBASE_SERVICE_ACCOUNT_BASE64` la service account JSON duoc encode base64. Khong commit file service account len Git.
 
-Khi chay backend rieng tren Render/Railway/VPS, can them `FIREBASE_SERVICE_ACCOUNT_BASE64`. Day la service account JSON duoc encode base64. Khong commit file service account len Git.
+`APP_PUBLIC_URL` la tuy chon. Neu khong set, backend tu lay domain public cua request, vi du `https://smart-room-payos-backend.onrender.com`.
 
 ## Endpoint
 
@@ -37,29 +39,47 @@ GET  /payment/success
 GET  /payment/cancel
 ```
 
-## Deploy Firebase Functions
+## Deploy Render
 
-```bash
-firebase functions:secrets:set PAYOS_CLIENT_ID --project smart-room-iot-353c5
-firebase functions:secrets:set PAYOS_API_KEY --project smart-room-iot-353c5
-firebase functions:secrets:set PAYOS_CHECKSUM_KEY --project smart-room-iot-353c5
-firebase deploy --only functions --project smart-room-iot-353c5
-```
+Da co file `render.yaml` o thu muc goc du an Flutter. Khi tao Blueprint tren Render, Render se chay backend trong `functions`.
 
-Webhook PayOS can cau hinh:
+Can khai bao cac bien moi truong tren Render:
 
 ```text
-https://asia-southeast1-smart-room-iot-353c5.cloudfunctions.net/api/payos-webhook
+PAYOS_CLIENT_ID
+PAYOS_API_KEY
+PAYOS_CHECKSUM_KEY
+FIREBASE_SERVICE_ACCOUNT_BASE64
 ```
 
-Flutter dang mac dinh goi backend nay. Neu dung backend rieng, chay Flutter voi URL backend rieng:
+Sau khi Render tao xong domain backend, vi du:
+
+```text
+https://smart-room-payos-backend.onrender.com
+```
+
+Thi chay Flutter voi URL backend do:
 
 ```bash
 flutter run --dart-define=PAYOS_BACKEND_URL=https://your-backend-domain.com
 ```
 
-Sau khi deploy len Render/Railway, cau hinh webhook trong PayOS:
+Va cau hinh webhook trong PayOS:
 
 ```text
 https://your-backend-domain.com/payos-webhook
+```
+
+## Neu sau nay dung Firebase Blaze
+
+Van co the deploy cung backend nay len Firebase Functions. Khi do URL backend se la:
+
+```text
+https://asia-southeast1-smart-room-iot-353c5.cloudfunctions.net/api
+```
+
+Va webhook PayOS la:
+
+```text
+https://asia-southeast1-smart-room-iot-353c5.cloudfunctions.net/api/payos-webhook
 ```

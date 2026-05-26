@@ -108,7 +108,7 @@ function appBaseUrl(request) {
   if (process.env.APP_PUBLIC_URL) return process.env.APP_PUBLIC_URL;
 
   const host = request?.get?.('x-forwarded-host') || request?.get?.('host');
-  if (host && /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:\d+)?$/.test(host)) {
+  if (host && !host.includes('cloudfunctions.net')) {
     const protocol = request?.get?.('x-forwarded-proto') || request?.protocol || 'https';
     return `${protocol}://${host}`;
   }

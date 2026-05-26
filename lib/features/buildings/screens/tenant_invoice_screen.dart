@@ -10,8 +10,7 @@ import '../view_models/tenant_invoice_detail_view_model.dart';
 const _allInvoiceStatus = 'all';
 const _payosBackendBaseUrl = String.fromEnvironment(
   'PAYOS_BACKEND_URL',
-  defaultValue:
-      'https://asia-southeast1-smart-room-iot-353c5.cloudfunctions.net/api',
+  defaultValue: '',
 );
 
 class _InvoiceStatusOption {
