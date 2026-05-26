@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/services/app_firestore_service.dart';
+import '../../../core/widgets/building_map_preview.dart';
 import '../view_models/admin_building_view_model.dart';
 import 'admin_invoice_management_screen.dart';
 import 'admin_room_management_screen.dart';
@@ -62,6 +63,8 @@ class _AdminBuildingScreenState extends State<AdminBuildingScreen> {
             ),
             const SizedBox(height: 4),
             Text((building['address'] ?? 'Chưa có địa chỉ').toString()),
+            const SizedBox(height: 16),
+            BuildingMapPreview(building: building),
             const SizedBox(height: 16),
             _BuildingStats(
               buildingId: buildingId,
