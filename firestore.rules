@@ -54,6 +54,10 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    match /buildingPayosSettings/{buildingId} {
+      allow read, write: if false;
+    }
+
     match /buildings/{buildingId} {
       allow read: if signedIn();
       allow create: if signedIn()

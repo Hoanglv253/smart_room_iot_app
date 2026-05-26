@@ -4,6 +4,11 @@ import 'package:flutter/material.dart';
 import '../view_models/admin_settings_view_model.dart';
 import 'admin_ad_settings_screen.dart';
 
+const _payosBackendBaseUrl = String.fromEnvironment(
+  'PAYOS_BACKEND_URL',
+  defaultValue: '',
+);
+
 class AdminSettingsScreen extends StatefulWidget {
   const AdminSettingsScreen({required this.user, super.key});
 
@@ -31,17 +36,22 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   final _billCloseDayController = TextEditingController();
   final _billDueDayController = TextEditingController();
   final _bankNameController = TextEditingController();
-  final _bankIdController = TextEditingController();
   final _bankAccountNumberController = TextEditingController();
   final _bankAccountHolderController = TextEditingController();
   final _transferContentController = TextEditingController();
+  final _payosClientIdController = TextEditingController();
+  final _payosApiKeyController = TextEditingController();
+  final _payosChecksumKeyController = TextEditingController();
   final _rulesController = TextEditingController();
   final _viewModel = AdminSettingsViewModel();
 
   String? _buildingId;
   String? _loadError;
+  String? _payosStatusMessage;
   bool _isLoading = true;
   bool _isSaving = false;
+  bool _isPayosSaving = false;
+  bool _isPayosConfigured = false;
 
   bool _wifi = true;
   bool _elevator = false;
@@ -85,10 +95,12 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     _billCloseDayController.dispose();
     _billDueDayController.dispose();
     _bankNameController.dispose();
-    _bankIdController.dispose();
     _bankAccountNumberController.dispose();
     _bankAccountHolderController.dispose();
     _transferContentController.dispose();
+    _payosClientIdController.dispose();
+    _payosApiKeyController.dispose();
+    _payosChecksumKeyController.dispose();
     _rulesController.dispose();
     _viewModel.dispose();
     super.dispose();
@@ -118,6 +130,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       );
     } else if (result.buildingId != null) {
       _fillBuildingForm(result.buildingId!, result.data);
+      await _loadPayosSettings(result.buildingId!);
     }
 
     if (mounted) setState(() => _isLoading = false);
@@ -147,7 +160,6 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     _setText(_billCloseDayController, data['billCloseDay']);
     _setText(_billDueDayController, data['billDueDay']);
     _setText(_bankNameController, paymentSettings['bankName']);
-    _setText(_bankIdController, paymentSettings['bankId']);
     _setText(
       _bankAccountNumberController,
       paymentSettings['bankAccountNumber'],
@@ -202,6 +214,117 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       displaySettings['showAvailableRooms'],
       fallback: _showAvailableRooms,
     );
+  }
+
+  Future<void> _loadPayosSettings(String buildingId) async {
+    if (_payosBackendBaseUrl.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _isPayosConfigured = false;
+        _payosStatusMessage =
+            'Chua cau hinh PAYOS_BACKEND_URL cho app Flutter.';
+      });
+      return;
+    }
+
+    try {
+      final idToken = await widget.user.getIdToken();
+      if (idToken == null || idToken.isEmpty) {
+        throw StateError('Khong lay duoc Firebase ID token.');
+      }
+
+      final data = await _viewModel.loadPayosSettings(
+        backendBaseUrl: _payosBackendBaseUrl,
+        idToken: idToken,
+        buildingId: buildingId,
+      );
+
+      if (!mounted) return;
+      final configured = data?['configured'] == true;
+      final clientIdTail = data?['clientIdTail']?.toString() ?? '';
+
+      setState(() {
+        _isPayosConfigured = configured;
+        _payosStatusMessage = configured
+            ? 'Da cau hinh PayOS cho toa nha nay. Client ID ket thuc bang $clientIdTail.'
+            : 'Chua cau hinh PayOS rieng cho toa nha nay.';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isPayosConfigured = false;
+        _payosStatusMessage = 'Khong tai duoc cau hinh PayOS: $error';
+      });
+    }
+  }
+
+  Future<void> _savePayosSettings() async {
+    final buildingId = _buildingId;
+    final clientId = _payosClientIdController.text.trim();
+    final apiKey = _payosApiKeyController.text.trim();
+    final checksumKey = _payosChecksumKeyController.text.trim();
+
+    if (buildingId == null || buildingId.isEmpty) {
+      _showSnack('Hay luu thiet lap toa nha truoc khi cau hinh PayOS.');
+      return;
+    }
+
+    if (_payosBackendBaseUrl.isEmpty) {
+      _showSnack('Chua cau hinh PAYOS_BACKEND_URL cho app Flutter.');
+      return;
+    }
+
+    if (clientId.isEmpty || apiKey.isEmpty || checksumKey.isEmpty) {
+      _showSnack('Hay nhap du Client ID, API Key va Checksum Key PayOS.');
+      return;
+    }
+
+    setState(() => _isPayosSaving = true);
+
+    Map<String, dynamic>? data;
+    try {
+      final idToken = await widget.user.getIdToken();
+      if (idToken == null || idToken.isEmpty) {
+        throw StateError('Khong lay duoc Firebase ID token.');
+      }
+
+      data = await _viewModel.savePayosSettings(
+        backendBaseUrl: _payosBackendBaseUrl,
+        idToken: idToken,
+        buildingId: buildingId,
+        clientId: clientId,
+        apiKey: apiKey,
+        checksumKey: checksumKey,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      _showSnack('Khong luu duoc cau hinh PayOS: $error');
+      setState(() => _isPayosSaving = false);
+      return;
+    }
+
+    if (!mounted) return;
+
+    if (data == null) {
+      _showSnack(
+        _viewModel.errorMessage ?? 'Khong luu duoc cau hinh PayOS.',
+      );
+      setState(() => _isPayosSaving = false);
+      return;
+    }
+
+    final clientIdTail = data['clientIdTail']?.toString() ?? '';
+    _payosClientIdController.clear();
+    _payosApiKeyController.clear();
+    _payosChecksumKeyController.clear();
+
+    setState(() {
+      _isPayosSaving = false;
+      _isPayosConfigured = true;
+      _payosStatusMessage =
+          'Da luu PayOS cho toa nha. Client ID ket thuc bang $clientIdTail.';
+    });
+    _showSnack('Da luu cau hinh PayOS cho toa nha.');
   }
 
   Future<void> _saveBuilding() async {
@@ -301,7 +424,6 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       },
       'paymentSettings': {
         'bankName': _bankNameController.text.trim(),
-        'bankId': _bankIdController.text.trim(),
         'bankAccountNumber': _bankAccountNumberController.text.trim(),
         'bankAccountHolder': _bankAccountHolderController.text.trim(),
         'transferContentTemplate': _transferContentController.text.trim(),
@@ -532,11 +654,6 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           children: [
             _buildTextField(_bankNameController, 'Ten ngan hang'),
             _buildTextField(
-              _bankIdController,
-              'Ma ngan hang VietQR',
-              helperText: 'Nhap BIN hoac code ngan hang, vi du VCB, MB, 970436.',
-            ),
-            _buildTextField(
               _bankAccountNumberController,
               'So tai khoan',
               keyboardType: TextInputType.number,
@@ -548,6 +665,47 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
               helperText:
                   'Co the dung {room}, {month}, {year}, {name} de app tu thay.',
               maxLines: 2,
+            ),
+          ],
+        ),
+        _SettingsSection(
+          title: 'PayOS tu dong',
+          children: [
+            _PayosStatusBox(
+              configured: _isPayosConfigured,
+              message: _payosStatusMessage ??
+                  'PayOS se tu xac nhan hoa don khi ngan hang bao giao dich.',
+            ),
+            const SizedBox(height: 12),
+            _buildTextField(
+              _payosClientIdController,
+              'Client ID PayOS',
+              obscureText: true,
+            ),
+            _buildTextField(
+              _payosApiKeyController,
+              'API Key PayOS',
+              obscureText: true,
+            ),
+            _buildTextField(
+              _payosChecksumKeyController,
+              'Checksum Key PayOS',
+              obscureText: true,
+              helperText:
+                  'App khong hien lai key cu. Nhap du 3 o neu muon cap nhat.',
+            ),
+            FilledButton.icon(
+              onPressed: _isPayosSaving ? null : _savePayosSettings,
+              icon: _isPayosSaving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.verified_user_outlined),
+              label: Text(
+                _isPayosConfigured ? 'Cap nhat PayOS' : 'Luu cau hinh PayOS',
+              ),
             ),
           ],
         ),
@@ -665,6 +823,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     int maxLines = 1,
     String? helperText,
     ValueChanged<String>? onChanged,
+    bool obscureText = false,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -673,6 +832,9 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         keyboardType: keyboardType,
         maxLines: maxLines,
         onChanged: onChanged,
+        obscureText: obscureText,
+        enableSuggestions: !obscureText,
+        autocorrect: !obscureText,
         decoration: InputDecoration(
           labelText: label,
           helperText: helperText,
@@ -692,6 +854,42 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       title: Text(title),
       value: value,
       onChanged: onChanged,
+    );
+  }
+}
+
+class _PayosStatusBox extends StatelessWidget {
+  const _PayosStatusBox({
+    required this.configured,
+    required this.message,
+  });
+
+  final bool configured;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = configured ? Colors.green : Colors.orange;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            configured ? Icons.check_circle_outline : Icons.info_outline,
+            color: color,
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: Text(message)),
+        ],
+      ),
     );
   }
 }

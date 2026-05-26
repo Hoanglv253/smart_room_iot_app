@@ -42,6 +42,20 @@ class CreateInvoiceViewModel extends BaseViewModel {
     );
   }
 
+  Future<bool> updateUnpaidInvoice({
+    required String buildingId,
+    required String invoiceId,
+    required Map<String, dynamic> invoice,
+  }) {
+    return runBusyAction(
+      () => _invoiceRepository.updateUnpaidInvoice(
+        buildingId: buildingId,
+        invoiceId: invoiceId,
+        invoice: invoice,
+      ),
+    );
+  }
+
   void setRoomHistoryLoading(bool value) {
     if (_isLoadingRoomHistory == value) return;
     _isLoadingRoomHistory = value;

@@ -681,93 +681,26 @@ class _PaymentInstructionSection extends StatelessWidget {
         final building = snapshot.data!;
         final settings = _readMap(building['paymentSettings']);
         final bankName = _text(settings['bankName'], 'Chua thiet lap');
-        final bankId = _compactText(settings['bankId']);
         final accountNumber =
             _text(settings['bankAccountNumber'], 'Chua thiet lap');
-        final rawAccountNumber = _compactText(settings['bankAccountNumber']);
         final accountHolder =
             _text(settings['bankAccountHolder'], 'Chua thiet lap');
-        final rawAccountHolder = _text(settings['bankAccountHolder'], '');
-        final amount = _readInt(invoice['totalAmount']);
         final transferContent = _transferContent(
           settings['transferContentTemplate'],
           invoice,
         );
-        final canCreateQr = bankId.isNotEmpty &&
-            rawAccountNumber.isNotEmpty &&
-            amount > 0;
-        final vietQrUrl = canCreateQr
-            ? _vietQrUrl(
-                bankId: bankId,
-                accountNo: rawAccountNumber,
-                amount: amount,
-                addInfo: transferContent,
-                accountName: rawAccountHolder,
-              )
-            : '';
 
         return _TenantInvoiceSection(
           title: 'Huong dan thanh toan',
           children: [
             _InfoRow(label: 'Ngan hang', value: bankName),
-            _InfoRow(
-              label: 'Ma VietQR',
-              value: _text(settings['bankId'], 'Chua thiet lap'),
-            ),
             _InfoRow(label: 'So tai khoan', value: accountNumber),
             _InfoRow(label: 'Chu tai khoan', value: accountHolder),
             _InfoRow(label: 'So tien', value: _money(invoice['totalAmount'])),
             _InfoRow(label: 'Noi dung', value: transferContent),
-            const SizedBox(height: 12),
-            if (canCreateQr)
-              FilledButton.icon(
-                onPressed: () {
-                  _showVietQrDialog(
-                    context,
-                    qrUrl: vietQrUrl,
-                    bankName: bankName,
-                    accountNumber: accountNumber,
-                    accountHolder: accountHolder,
-                    amount: amount,
-                    transferContent: transferContent,
-                  );
-                },
-                icon: const Icon(Icons.qr_code_2_outlined),
-                label: const Text('Tao ma QR VietQR'),
-              )
-            else
-              const _VietQrMissingNotice(),
           ],
         );
       },
-    );
-  }
-}
-
-class _VietQrMissingNotice extends StatelessWidget {
-  const _VietQrMissingNotice();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.orange.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
-      ),
-      child: const Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.info_outline, color: Colors.orange, size: 20),
-          SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Admin can thiet lap ma ngan hang VietQR, so tai khoan va so tien hoa don de tao ma QR.',
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -974,97 +907,9 @@ String _money(Object? value) {
   return '$amount VND';
 }
 
-void _showVietQrDialog(
-  BuildContext context, {
-  required String qrUrl,
-  required String bankName,
-  required String accountNumber,
-  required String accountHolder,
-  required int amount,
-  required String transferContent,
-}) {
-  showDialog<void>(
-    context: context,
-    builder: (dialogContext) {
-      return Dialog(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Ma QR VietQR',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => Navigator.of(dialogContext).pop(),
-                      icon: const Icon(Icons.close),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Center(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.network(
-                      qrUrl,
-                      width: 260,
-                      height: 260,
-                      fit: BoxFit.contain,
-                      loadingBuilder: (context, child, progress) {
-                        if (progress == null) return child;
-                        return const SizedBox(
-                          width: 260,
-                          height: 260,
-                          child: Center(child: CircularProgressIndicator()),
-                        );
-                      },
-                      errorBuilder: (context, error, stackTrace) {
-                        return const SizedBox(
-                          width: 260,
-                          height: 260,
-                          child: Center(
-                            child: Text(
-                              'Khong tai duoc ma QR VietQR.',
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _InfoRow(label: 'Ngan hang', value: bankName),
-                _InfoRow(label: 'So tai khoan', value: accountNumber),
-                _InfoRow(label: 'Chu tai khoan', value: accountHolder),
-                _InfoRow(label: 'So tien', value: _money(amount)),
-                _InfoRow(label: 'Noi dung', value: transferContent),
-              ],
-            ),
-          ),
-        ),
-      );
-    },
-  );
-}
-
 String _text(Object? value, String fallback) {
   final text = value?.toString().trim() ?? '';
   return text.isEmpty ? fallback : text;
-}
-
-String _compactText(Object? value) {
-  return value?.toString().trim().replaceAll(RegExp(r'\s+'), '') ?? '';
 }
 
 Map<String, dynamic> _readMap(Object? value) {
@@ -1089,24 +934,6 @@ String _transferContent(Object? template, Map<String, dynamic> invoice) {
       .replaceAll('{month}', month.toString())
       .replaceAll('{year}', year.toString())
       .replaceAll('{name}', tenantName);
-}
-
-String _vietQrUrl({
-  required String bankId,
-  required String accountNo,
-  required int amount,
-  required String addInfo,
-  required String accountName,
-}) {
-  return Uri.https(
-    'img.vietqr.io',
-    '/image/$bankId-$accountNo-compact2.png',
-    {
-      'amount': amount.toString(),
-      'addInfo': addInfo,
-      if (accountName.trim().isNotEmpty) 'accountName': accountName.trim(),
-    },
-  ).toString();
 }
 
 int _readInt(Object? value) {

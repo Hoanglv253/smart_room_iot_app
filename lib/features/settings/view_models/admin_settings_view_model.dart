@@ -115,4 +115,48 @@ class AdminSettingsViewModel extends BaseViewModel {
       buildingId: savedBuildingId,
     );
   }
+
+  Future<Map<String, dynamic>?> loadPayosSettings({
+    required String backendBaseUrl,
+    required String idToken,
+    required String buildingId,
+  }) async {
+    clearError();
+
+    try {
+      return await _settingsRepository.loadBuildingPayosSettings(
+        backendBaseUrl: backendBaseUrl,
+        idToken: idToken,
+        buildingId: buildingId,
+      );
+    } catch (error) {
+      setError(error.toString());
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> savePayosSettings({
+    required String backendBaseUrl,
+    required String idToken,
+    required String buildingId,
+    required String clientId,
+    required String apiKey,
+    required String checksumKey,
+  }) async {
+    clearError();
+
+    try {
+      return await _settingsRepository.saveBuildingPayosSettings(
+        backendBaseUrl: backendBaseUrl,
+        idToken: idToken,
+        buildingId: buildingId,
+        clientId: clientId,
+        apiKey: apiKey,
+        checksumKey: checksumKey,
+      );
+    } catch (error) {
+      setError(error.toString());
+      return null;
+    }
+  }
 }

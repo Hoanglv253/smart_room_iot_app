@@ -229,12 +229,99 @@ class SettingsRepository {
     });
   }
 
+  Future<Map<String, dynamic>> loadBuildingPayosSettings({
+    required String backendBaseUrl,
+    required String idToken,
+    required String buildingId,
+  }) async {
+    final response = await http
+        .get(
+          _backendUri(
+            backendBaseUrl,
+            '/building-payos-settings',
+          ).replace(queryParameters: {'buildingId': buildingId}),
+          headers: {'Authorization': 'Bearer $idToken'},
+        )
+        .timeout(
+          const Duration(seconds: 15),
+          onTimeout: () {
+            throw TimeoutException('Ket noi PayOS backend qua lau.');
+          },
+        );
+
+    final data = _decodeMap(response.body);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        data['message']?.toString() ?? 'Khong tai duoc cau hinh PayOS.',
+      );
+    }
+
+    return data;
+  }
+
+  Future<Map<String, dynamic>> saveBuildingPayosSettings({
+    required String backendBaseUrl,
+    required String idToken,
+    required String buildingId,
+    required String clientId,
+    required String apiKey,
+    required String checksumKey,
+  }) async {
+    final response = await http
+        .post(
+          _backendUri(backendBaseUrl, '/building-payos-settings'),
+          headers: {
+            'Authorization': 'Bearer $idToken',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({
+            'buildingId': buildingId,
+            'clientId': clientId,
+            'apiKey': apiKey,
+            'checksumKey': checksumKey,
+          }),
+        )
+        .timeout(
+          const Duration(seconds: 15),
+          onTimeout: () {
+            throw TimeoutException('Ket noi PayOS backend qua lau.');
+          },
+        );
+
+    final data = _decodeMap(response.body);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        data['message']?.toString() ?? 'Khong luu duoc cau hinh PayOS.',
+      );
+    }
+
+    return data;
+  }
+
   static List<String> _stringList(Object? value) {
     if (value is! List) return const [];
     return value
         .map((item) => item.toString().trim())
         .where((item) => item.isNotEmpty)
         .toList();
+  }
+
+  static Map<String, dynamic> _decodeMap(String body) {
+    if (body.trim().isEmpty) return {};
+
+    final decoded = jsonDecode(body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    if (decoded is Map) {
+      return decoded.map((key, dynamic value) => MapEntry(key.toString(), value));
+    }
+    return {};
+  }
+
+  static Uri _backendUri(String backendBaseUrl, String path) {
+    final base = backendBaseUrl.endsWith('/')
+        ? backendBaseUrl.substring(0, backendBaseUrl.length - 1)
+        : backendBaseUrl;
+    return Uri.parse('$base$path');
   }
 
   static String _safeStorageFileName(String name) {
