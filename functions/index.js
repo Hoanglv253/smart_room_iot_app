@@ -93,22 +93,40 @@ initializeFirebase();
 const db = admin.firestore();
 let payosInstance = null;
 
+function hasGlobalPayosConfig() {
+  return Boolean(
+    envValue('PAYOS_CLIENT_ID') &&
+      envValue('PAYOS_API_KEY') &&
+      envValue('PAYOS_CHECKSUM_KEY'),
+  );
+}
+
+function globalPayosConfig() {
+  return {
+    source: 'global',
+    clientId: requireEnv('PAYOS_CLIENT_ID'),
+    apiKey: requireEnv('PAYOS_API_KEY'),
+    checksumKey: requireEnv('PAYOS_CHECKSUM_KEY'),
+  };
+}
+
 function payosClient() {
   if (payosInstance) return payosInstance;
 
-  payosInstance = new PayOS(
-    requireEnv('PAYOS_CLIENT_ID'),
-    requireEnv('PAYOS_API_KEY'),
-    requireEnv('PAYOS_CHECKSUM_KEY'),
-  );
+  const config = globalPayosConfig();
+  payosInstance = payosClientFromConfig(config);
   return payosInstance;
+}
+
+function payosClientFromConfig(config) {
+  return new PayOS(config.clientId, config.apiKey, config.checksumKey);
 }
 
 function appBaseUrl(request) {
   if (process.env.APP_PUBLIC_URL) return process.env.APP_PUBLIC_URL;
 
   const host = request?.get?.('x-forwarded-host') || request?.get?.('host');
-  if (host && /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:\d+)?$/.test(host)) {
+  if (host && !host.includes('cloudfunctions.net')) {
     const protocol = request?.get?.('x-forwarded-proto') || request?.protocol || 'https';
     return `${protocol}://${host}`;
   }
@@ -141,8 +159,81 @@ function invoiceRef(buildingId, invoiceId) {
   return db.collection('buildings').doc(buildingId).collection('invoices').doc(invoiceId);
 }
 
+function buildingRef(buildingId) {
+  return db.collection('buildings').doc(buildingId);
+}
+
+function buildingPayosSettingsRef(buildingId) {
+  return db.collection('buildingPayosSettings').doc(buildingId);
+}
+
 function paymentRef(orderCode) {
   return db.collection('payosPayments').doc(String(orderCode));
+}
+
+function maskedTail(value) {
+  const text = readString(value);
+  if (!text) return '';
+  return text.length <= 6 ? text : text.slice(-6);
+}
+
+function publicPayosSettings(config) {
+  return {
+    configured: true,
+    source: config.source,
+    clientIdTail: maskedTail(config.clientId),
+    apiKeyTail: maskedTail(config.apiKey),
+    checksumKeyTail: maskedTail(config.checksumKey),
+  };
+}
+
+async function ensureBuildingAdmin(buildingId, uid) {
+  const buildingSnap = await buildingRef(buildingId).get();
+
+  if (!buildingSnap.exists) {
+    const error = new Error('Khong tim thay toa nha.');
+    error.status = 404;
+    throw error;
+  }
+
+  const building = buildingSnap.data();
+  if (building.adminId !== uid) {
+    const error = new Error('Ban khong co quyen cau hinh PayOS cho toa nha nay.');
+    error.status = 403;
+    throw error;
+  }
+
+  return building;
+}
+
+async function payosConfigForBuilding(buildingId) {
+  const settingsSnap = await buildingPayosSettingsRef(buildingId).get();
+
+  if (settingsSnap.exists) {
+    const settings = settingsSnap.data();
+    const clientId = readString(settings.clientId);
+    const apiKey = readString(settings.apiKey);
+    const checksumKey = readString(settings.checksumKey);
+
+    if (clientId && apiKey && checksumKey) {
+      return {
+        source: 'building',
+        clientId,
+        apiKey,
+        checksumKey,
+      };
+    }
+  }
+
+  if (hasGlobalPayosConfig()) return globalPayosConfig();
+
+  const error = new Error('Admin chua cau hinh PayOS cho toa nha nay.');
+  error.status = 409;
+  throw error;
+}
+
+function rawWebhookOrderCode(requestBody) {
+  return readInt(requestBody?.data?.orderCode || requestBody?.orderCode);
 }
 
 function isSuccessfulPayosWebhook(requestBody, webhookData) {
@@ -265,7 +356,10 @@ async function syncPayosPaymentStatus(orderCode) {
 
   const invoice = invoiceSnap.data();
   const invoiceAmount = readInt(invoice.totalAmount);
-  const paymentInfo = await payosClient().getPaymentLinkInformation(orderCode);
+  const payosConfig = await payosConfigForBuilding(payment.buildingId);
+  const paymentInfo = await payosClientFromConfig(
+    payosConfig,
+  ).getPaymentLinkInformation(orderCode);
   const amountPaid = readInt(paymentInfo.amountPaid);
   const paymentStatus = readString(paymentInfo.status).toUpperCase();
 
@@ -337,11 +431,8 @@ app.get('/health', (request, response) => {
   response.json({
     ok: true,
     webhookUrl: `${appBaseUrl(request)}/payos-webhook`,
-    payosConfigured: Boolean(
-      envValue('PAYOS_CLIENT_ID') &&
-        envValue('PAYOS_API_KEY') &&
-        envValue('PAYOS_CHECKSUM_KEY'),
-    ),
+    payosConfigured: hasGlobalPayosConfig(),
+    buildingPayosSupported: true,
     firebaseConfigured: Boolean(
       process.env.FIREBASE_SERVICE_ACCOUNT_JSON ||
         process.env.FIREBASE_SERVICE_ACCOUNT_BASE64 ||
@@ -350,6 +441,87 @@ app.get('/health', (request, response) => {
         process.env.K_SERVICE,
     ),
   });
+});
+
+app.get('/building-payos-settings', async (request, response) => {
+  try {
+    const decodedToken = await verifyFirebaseUser(request);
+    const buildingId = readString(request.query?.buildingId);
+
+    if (!buildingId) {
+      response.status(400).json({ message: 'Thieu buildingId.' });
+      return;
+    }
+
+    await ensureBuildingAdmin(buildingId, decodedToken.uid);
+
+    const settingsSnap = await buildingPayosSettingsRef(buildingId).get();
+    if (!settingsSnap.exists) {
+      response.json({ configured: false });
+      return;
+    }
+
+    const settings = settingsSnap.data();
+    const clientId = readString(settings.clientId);
+    const apiKey = readString(settings.apiKey);
+    const checksumKey = readString(settings.checksumKey);
+
+    if (!clientId || !apiKey || !checksumKey) {
+      response.json({ configured: false });
+      return;
+    }
+
+    response.json(publicPayosSettings({
+      source: 'building',
+      clientId,
+      apiKey,
+      checksumKey,
+    }));
+  } catch (error) {
+    sendError(response, error);
+  }
+});
+
+app.post('/building-payos-settings', async (request, response) => {
+  try {
+    const decodedToken = await verifyFirebaseUser(request);
+    const buildingId = readString(request.body?.buildingId);
+    const clientId = readString(request.body?.clientId);
+    const apiKey = readString(request.body?.apiKey);
+    const checksumKey = readString(request.body?.checksumKey);
+
+    if (!buildingId) {
+      response.status(400).json({ message: 'Thieu buildingId.' });
+      return;
+    }
+
+    if (!clientId || !apiKey || !checksumKey) {
+      response.status(400).json({
+        message: 'Hay nhap du Client ID, API Key va Checksum Key PayOS.',
+      });
+      return;
+    }
+
+    await ensureBuildingAdmin(buildingId, decodedToken.uid);
+
+    await buildingPayosSettingsRef(buildingId).set({
+      buildingId,
+      adminId: decodedToken.uid,
+      clientId,
+      apiKey,
+      checksumKey,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    response.json(publicPayosSettings({
+      source: 'building',
+      clientId,
+      apiKey,
+      checksumKey,
+    }));
+  } catch (error) {
+    sendError(response, error);
+  }
 });
 
 app.post('/create-payos-payment', async (request, response) => {
@@ -402,8 +574,9 @@ app.post('/create-payos-payment', async (request, response) => {
     const baseUrl = appBaseUrl(request);
     const returnUrl = `${baseUrl}/payment/success?buildingId=${buildingId}&invoiceId=${invoiceId}`;
     const cancelUrl = `${baseUrl}/payment/cancel?buildingId=${buildingId}&invoiceId=${invoiceId}`;
+    const payosConfig = await payosConfigForBuilding(buildingId);
 
-    const paymentLink = await payosClient().createPaymentLink({
+    const paymentLink = await payosClientFromConfig(payosConfig).createPaymentLink({
       orderCode,
       amount,
       description,
@@ -430,6 +603,8 @@ app.post('/create-payos-payment', async (request, response) => {
           checkoutUrl: paymentLink.checkoutUrl || '',
           qrCode: paymentLink.qrCode || '',
           description,
+          payosSource: payosConfig.source,
+          payosClientIdTail: maskedTail(payosConfig.clientId),
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
         },
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -444,6 +619,8 @@ app.post('/create-payos-payment', async (request, response) => {
         status: INVOICE_STATUS.waitingPayment,
         paymentLinkId: paymentLink.paymentLinkId || '',
         checkoutUrl: paymentLink.checkoutUrl || '',
+        payosSource: payosConfig.source,
+        payosClientIdTail: maskedTail(payosConfig.clientId),
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
@@ -511,10 +688,30 @@ app.get('/payment/cancel', (_request, response) => {
 });
 
 app.post('/payos-webhook', async (request, response) => {
+  const rawOrderCode = rawWebhookOrderCode(request.body);
+
+  if (!rawOrderCode) {
+    response.status(200).send('Ignored');
+    return;
+  }
+
+  const targetPaymentRef = paymentRef(rawOrderCode);
+  const paymentSnap = await targetPaymentRef.get();
+
+  if (!paymentSnap.exists) {
+    console.warn('PayOS payment not found', { orderCode: rawOrderCode });
+    response.status(200).send('Payment not found');
+    return;
+  }
+
+  const payment = paymentSnap.data();
   let webhookData;
 
   try {
-    webhookData = payosClient().verifyPaymentWebhookData(request.body);
+    const payosConfig = await payosConfigForBuilding(payment.buildingId);
+    webhookData = payosClientFromConfig(payosConfig).verifyPaymentWebhookData(
+      request.body,
+    );
   } catch (error) {
     console.error('Invalid PayOS webhook', error);
     response.status(400).send('Invalid webhook');
@@ -530,17 +727,8 @@ app.post('/payos-webhook', async (request, response) => {
   const amount = readInt(webhookData.amount);
   const paymentLinkId = readString(webhookData.paymentLinkId);
 
-  if (!orderCode) {
-    response.status(200).send('Ignored');
-    return;
-  }
-
-  const targetPaymentRef = paymentRef(orderCode);
-  const paymentSnap = await targetPaymentRef.get();
-
-  if (!paymentSnap.exists) {
-    console.warn('PayOS payment not found', { orderCode });
-    response.status(200).send('Payment not found');
+  if (orderCode !== rawOrderCode) {
+    response.status(400).send('Invalid order code');
     return;
   }
 
@@ -555,7 +743,6 @@ app.post('/payos-webhook', async (request, response) => {
     return;
   }
 
-  const payment = paymentSnap.data();
   const targetInvoiceRef = invoiceRef(payment.buildingId, payment.invoiceId);
   const invoiceSnap = await targetInvoiceRef.get();
 

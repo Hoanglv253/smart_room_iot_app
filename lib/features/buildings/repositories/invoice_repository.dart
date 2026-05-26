@@ -39,7 +39,10 @@ class InvoiceRepository {
     final snapshot =
         await AppFirestoreService.buildingInvoices(buildingId).get();
     return snapshot.docs
-        .map((doc) => doc.data())
+        .map((doc) => {
+              ...doc.data(),
+              '_id': doc.id,
+            })
         .where((invoice) => invoice['roomId'] == roomId)
         .where((invoice) => invoice['status'] != InvoiceStatus.cancelled)
         .toList();
@@ -53,6 +56,33 @@ class InvoiceRepository {
       ...invoice,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> updateUnpaidInvoice({
+    required String buildingId,
+    required String invoiceId,
+    required Map<String, dynamic> invoice,
+  }) async {
+    final invoiceRef =
+        AppFirestoreService.buildingInvoices(buildingId).doc(invoiceId);
+
+    await AppFirestoreService.db.runTransaction((transaction) async {
+      final snapshot = await transaction.get(invoiceRef);
+      final status =
+          (snapshot.data()?['status'] ?? InvoiceStatus.unpaid).toString();
+
+      if (status != InvoiceStatus.unpaid) {
+        throw StateError('Chi duoc sua hoa don chua thanh toan.');
+      }
+
+      transaction.update(invoiceRef, {
+        ...invoice,
+        'status': InvoiceStatus.unpaid,
+        'paymentMethod': '',
+        'paymentNote': '',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
     });
   }
 

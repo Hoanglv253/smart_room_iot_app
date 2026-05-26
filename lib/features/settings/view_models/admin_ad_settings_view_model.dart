@@ -26,10 +26,7 @@ class AdminAdSettingsViewModel extends BaseViewModel {
     return _settingsRepository.room(buildingId: buildingId, roomId: roomId);
   }
 
-  Future<bool> publishAd({
-    required String buildingId,
-    required String userId,
-  }) {
+  Future<bool> publishAd({required String buildingId, required String userId}) {
     return runBusyAction(() {
       return _settingsRepository.publishBuildingAd(
         buildingId: buildingId,

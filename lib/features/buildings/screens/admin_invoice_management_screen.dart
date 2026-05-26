@@ -170,6 +170,7 @@ class _AdminInvoiceManagementScreenState
                               MaterialPageRoute(
                                 builder: (_) => _AdminInvoiceDetailScreen(
                                   buildingId: widget.buildingId,
+                                  building: widget.building,
                                   invoiceId: doc.id,
                                   invoice: doc.data(),
                                   canConfirmPayment:
@@ -487,10 +488,16 @@ class _CreateInvoiceScreen extends StatefulWidget {
   const _CreateInvoiceScreen({
     required this.buildingId,
     required this.building,
+    this.invoiceId,
+    this.initialInvoice,
   });
 
   final String buildingId;
   final Map<String, dynamic> building;
+  final String? invoiceId;
+  final Map<String, dynamic>? initialInvoice;
+
+  bool get isEditing => invoiceId != null && initialInvoice != null;
 
   @override
   State<_CreateInvoiceScreen> createState() => _CreateInvoiceScreenState();
@@ -521,16 +528,32 @@ class _CreateInvoiceScreenState extends State<_CreateInvoiceScreen> {
     _roomsFuture = _viewModel.buildingRooms(widget.buildingId);
 
     final now = DateTime.now();
-    _monthController.text = now.month.toString();
-    _yearController.text = now.year.toString();
+    final invoice = widget.initialInvoice;
+    _selectedRoomId = invoice?['roomId']?.toString();
+    _monthController.text =
+        _readInt(invoice?['month'], fallback: now.month).toString();
+    _yearController.text =
+        _readInt(invoice?['year'], fallback: now.year).toString();
     _monthController.addListener(_handlePeriodChanged);
     _yearController.addListener(_handlePeriodChanged);
-    _serviceFeeController.text = _readInt(widget.building['serviceFee']).toString();
+    _roomRentController.text = _readInt(invoice?['roomRent']).toString();
+    _electricityOldController.text =
+        _readInt(invoice?['electricityOld']).toString();
+    _electricityNewController.text =
+        _readInt(invoice?['electricityNew']).toString();
+    _waterOldController.text = _readInt(invoice?['waterOld']).toString();
+    _waterNewController.text = _readInt(invoice?['waterNew']).toString();
+    _serviceFeeController.text =
+        _readInt(invoice?['serviceFee'], fallback: _readInt(widget.building['serviceFee']))
+            .toString();
     _internetFeeController.text =
-        _readInt(widget.building['internetFee']).toString();
-    _parkingFeeController.text = _readInt(widget.building['parkingFee']).toString();
-    _otherFeeController.text = '0';
-    _discountController.text = '0';
+        _readInt(invoice?['internetFee'], fallback: _readInt(widget.building['internetFee']))
+            .toString();
+    _parkingFeeController.text =
+        _readInt(invoice?['parkingFee'], fallback: _readInt(widget.building['parkingFee']))
+            .toString();
+    _otherFeeController.text = _readInt(invoice?['otherFee']).toString();
+    _discountController.text = _readInt(invoice?['discount']).toString();
 
     for (final controller in [
       _roomRentController,
@@ -545,6 +568,12 @@ class _CreateInvoiceScreenState extends State<_CreateInvoiceScreen> {
       _discountController,
     ]) {
       controller.addListener(_refreshTotal);
+    }
+
+    if (widget.isEditing) {
+      _viewModel.setRoomHistoryMessage(
+        'Dang sua hoa don chua thanh toan. Neu doi phong hoac ky, app se kiem tra trung hoa don khi luu.',
+      );
     }
   }
 
@@ -571,7 +600,7 @@ class _CreateInvoiceScreenState extends State<_CreateInvoiceScreen> {
   }
 
   void _handlePeriodChanged() {
-    if (_selectedRoom == null) return;
+    if (_selectedRoom == null && _selectedRoomId == null) return;
 
     _viewModel.setHasDuplicateInvoice(false);
     _viewModel.setRoomHistoryMessage(
@@ -610,7 +639,8 @@ class _CreateInvoiceScreenState extends State<_CreateInvoiceScreen> {
 
       final currentPeriod = _periodKeyFromControllers();
       final duplicateInvoice = invoices.where((invoice) {
-        return _periodKey(invoice) == currentPeriod;
+        return _periodKey(invoice) == currentPeriod &&
+            invoice['_id']?.toString() != widget.invoiceId;
       }).toList();
 
       final previousInvoices = invoices.where((invoice) {
@@ -655,10 +685,21 @@ class _CreateInvoiceScreenState extends State<_CreateInvoiceScreen> {
     }
   }
 
-  Future<void> _saveInvoice() async {
-    final roomDoc = _selectedRoom;
+  Future<void> _saveInvoice(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> rooms,
+  ) async {
+    if (widget.isEditing) {
+      final status =
+          (widget.initialInvoice?['status'] ?? InvoiceStatus.unpaid).toString();
+      if (status != InvoiceStatus.unpaid) {
+        _showSnack('Chi duoc sua hoa don chua thanh toan.');
+        return;
+      }
+    }
+
+    final roomDoc = _selectedRoom ?? _findRoomById(rooms, _selectedRoomId);
     if (roomDoc == null) {
-      _showSnack('Hay chon phong can tao hoa don.');
+      _showSnack('Hay chon phong can lap hoa don.');
       return;
     }
 
@@ -694,7 +735,8 @@ class _CreateInvoiceScreenState extends State<_CreateInvoiceScreen> {
 
     final currentPeriod = _periodKey(null, year: year, month: month);
     final hasDuplicate = existingInvoices.any((invoice) {
-      return _periodKey(invoice) == currentPeriod;
+      return _periodKey(invoice) == currentPeriod &&
+          invoice['_id']?.toString() != widget.invoiceId;
     });
     if (hasDuplicate) {
       _viewModel.setHasDuplicateInvoice(true);
@@ -718,52 +760,72 @@ class _CreateInvoiceScreenState extends State<_CreateInvoiceScreen> {
       final tenantEmail = _text(room['tenantEmail'], '');
       final dueDate = _dueDate(year, month, _readInt(widget.building['billDueDay']));
 
-      final saved = await _viewModel.createInvoice(
-        buildingId: widget.buildingId,
-        invoice: {
-          'buildingId': widget.buildingId,
-          'roomId': roomDoc.id,
-          'roomName': roomName,
-          'roomNumber': roomNumber,
-          'tenantId': tenantId,
-          'tenantName': tenantName,
-          'tenantEmail': tenantEmail,
-          'month': month,
-          'year': year,
-          'periodKey': '$year-${month.toString().padLeft(2, '0')}',
-          'roomRent': _readInt(_roomRentController.text),
-          'electricityOld': electricityOld,
-          'electricityNew': electricityNew,
-          'electricityUsage': electricityUsage,
-          'electricityPrice': electricityPrice,
-          'electricityAmount': electricityUsage * electricityPrice,
-          'waterOld': waterOld,
-          'waterNew': waterNew,
-          'waterUsage': waterUsage,
-          'waterPrice': waterPrice,
-          'waterAmount': waterUsage * waterPrice,
-          'serviceFee': _readInt(_serviceFeeController.text),
-          'internetFee': _readInt(_internetFeeController.text),
-          'parkingFee': _readInt(_parkingFeeController.text),
-          'otherFee': _readInt(_otherFeeController.text),
-          'discount': _readInt(_discountController.text),
-          'totalAmount': _totalAmount,
-          'status': InvoiceStatus.unpaid,
-          'paymentMethod': '',
-          'paymentNote': '',
-          'dueDate': Timestamp.fromDate(dueDate),
-        },
-      );
+      final invoiceData = {
+        'buildingId': widget.buildingId,
+        'roomId': roomDoc.id,
+        'roomName': roomName,
+        'roomNumber': roomNumber,
+        'tenantId': tenantId,
+        'tenantName': tenantName,
+        'tenantEmail': tenantEmail,
+        'month': month,
+        'year': year,
+        'periodKey': '$year-${month.toString().padLeft(2, '0')}',
+        'roomRent': _readInt(_roomRentController.text),
+        'electricityOld': electricityOld,
+        'electricityNew': electricityNew,
+        'electricityUsage': electricityUsage,
+        'electricityPrice': electricityPrice,
+        'electricityAmount': electricityUsage * electricityPrice,
+        'waterOld': waterOld,
+        'waterNew': waterNew,
+        'waterUsage': waterUsage,
+        'waterPrice': waterPrice,
+        'waterAmount': waterUsage * waterPrice,
+        'serviceFee': _readInt(_serviceFeeController.text),
+        'internetFee': _readInt(_internetFeeController.text),
+        'parkingFee': _readInt(_parkingFeeController.text),
+        'otherFee': _readInt(_otherFeeController.text),
+        'discount': _readInt(_discountController.text),
+        'totalAmount': _totalAmount,
+        'status': InvoiceStatus.unpaid,
+        'paymentMethod': '',
+        'paymentNote': '',
+        'dueDate': Timestamp.fromDate(dueDate),
+      };
+      final saved = widget.isEditing
+          ? await _viewModel.updateUnpaidInvoice(
+              buildingId: widget.buildingId,
+              invoiceId: widget.invoiceId!,
+              invoice: invoiceData,
+            )
+          : await _viewModel.createInvoice(
+              buildingId: widget.buildingId,
+              invoice: invoiceData,
+            );
       if (!saved) {
         _showSnack(_createInvoiceError());
         return;
       }
 
       if (!mounted) return;
-      Navigator.of(context).pop();
+      Navigator.of(context).pop(true);
     } catch (_) {
-      _showSnack('Khong tao duoc hoa don.');
+      _showSnack(
+        widget.isEditing ? 'Khong sua duoc hoa don.' : 'Khong tao duoc hoa don.',
+      );
     }
+  }
+
+  QueryDocumentSnapshot<Map<String, dynamic>>? _findRoomById(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> rooms,
+    String? roomId,
+  ) {
+    if (roomId == null) return null;
+    for (final room in rooms) {
+      if (room.id == roomId) return room;
+    }
+    return null;
   }
 
   int get _electricityAmount {
@@ -815,7 +877,9 @@ class _CreateInvoiceScreenState extends State<_CreateInvoiceScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Tao hoa don')),
+      appBar: AppBar(
+        title: Text(widget.isEditing ? 'Sua hoa don' : 'Tao hoa don'),
+      ),
       body: AnimatedBuilder(
         animation: _viewModel,
         builder: (context, _) {
@@ -843,11 +907,16 @@ class _CreateInvoiceScreenState extends State<_CreateInvoiceScreen> {
             );
           }
 
+              final selectedRoomId =
+                  _findRoomById(rooms, _selectedRoomId) == null
+                      ? null
+                      : _selectedRoomId;
+
               return ListView(
             padding: const EdgeInsets.all(16),
             children: [
               DropdownButtonFormField<String>(
-                initialValue: _selectedRoomId,
+                initialValue: selectedRoomId,
                 decoration: const InputDecoration(
                   labelText: 'Phong',
                   border: OutlineInputBorder(),
@@ -923,7 +992,7 @@ class _CreateInvoiceScreenState extends State<_CreateInvoiceScreen> {
                 onPressed: _viewModel.isLoading ||
                         _viewModel.hasDuplicateInvoice
                     ? null
-                    : _saveInvoice,
+                    : () => _saveInvoice(rooms),
                 icon: _viewModel.isLoading
                     ? const SizedBox(
                         width: 18,
@@ -931,7 +1000,7 @@ class _CreateInvoiceScreenState extends State<_CreateInvoiceScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.save_outlined),
-                label: const Text('Luu hoa don'),
+                label: Text(widget.isEditing ? 'Cap nhat hoa don' : 'Luu hoa don'),
               ),
             ],
           );
@@ -964,15 +1033,20 @@ class _CreateInvoiceScreenState extends State<_CreateInvoiceScreen> {
   String _createInvoiceError() {
     final error = _viewModel.errorMessage;
     if (error?.contains('permission-denied') == true) {
-      return 'Firestore chua cap quyen tao hoa don.';
+      return widget.isEditing
+          ? 'Firestore chua cap quyen sua hoa don.'
+          : 'Firestore chua cap quyen tao hoa don.';
+    }
+    if (error?.contains('Chi duoc sua hoa don chua thanh toan') == true) {
+      return 'Chi duoc sua hoa don chua thanh toan.';
     }
 
-    return 'Khong tao duoc hoa don.';
+    return widget.isEditing ? 'Khong sua duoc hoa don.' : 'Khong tao duoc hoa don.';
   }
 
-  static int _readInt(Object? value) {
+  static int _readInt(Object? value, {int fallback = 0}) {
     if (value is num) return value.toInt();
-    return int.tryParse(value?.toString() ?? '') ?? 0;
+    return int.tryParse(value?.toString() ?? '') ?? fallback;
   }
 
   static String _text(Object? value, String fallback) {
@@ -990,12 +1064,14 @@ class _CreateInvoiceScreenState extends State<_CreateInvoiceScreen> {
 class _AdminInvoiceDetailScreen extends StatefulWidget {
   const _AdminInvoiceDetailScreen({
     required this.buildingId,
+    required this.building,
     required this.invoiceId,
     required this.invoice,
     required this.canConfirmPayment,
   });
 
   final String buildingId;
+  final Map<String, dynamic> building;
   final String invoiceId;
   final Map<String, dynamic> invoice;
   final bool canConfirmPayment;
@@ -1031,21 +1107,20 @@ class _AdminInvoiceDetailScreenState extends State<_AdminInvoiceDetailScreen> {
     );
   }
 
-  Future<void> _rejectPayment() async {
-    final saved = await _viewModel.rejectPayment(
-      buildingId: widget.buildingId,
-      invoiceId: widget.invoiceId,
+  Future<void> _openEditInvoice() async {
+    final updated = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => _CreateInvoiceScreen(
+          buildingId: widget.buildingId,
+          building: widget.building,
+          invoiceId: widget.invoiceId,
+          initialInvoice: widget.invoice,
+        ),
+      ),
     );
 
-    if (!mounted) return;
-    if (saved) {
-      Navigator.of(context).pop();
-      return;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(_adminPaymentError('reject'))),
-    );
+    if (!mounted || updated != true) return;
+    Navigator.of(context).pop();
   }
 
   @override
@@ -1102,6 +1177,14 @@ class _AdminInvoiceDetailScreenState extends State<_AdminInvoiceDetailScreen> {
               children: [_InfoRow(label: 'Noi dung', value: paymentNote)],
             ),
           ],
+          if (status == InvoiceStatus.unpaid) ...[
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: _openEditInvoice,
+              icon: const Icon(Icons.edit_outlined),
+              label: const Text('Sua hoa don'),
+            ),
+          ],
           const SizedBox(height: 16),
           if (widget.canConfirmPayment && status != InvoiceStatus.paid) ...[
             AnimatedBuilder(
@@ -1119,15 +1202,6 @@ class _AdminInvoiceDetailScreenState extends State<_AdminInvoiceDetailScreen> {
                             : 'Danh dau da thanh toan',
                       ),
                     ),
-                    if (status == InvoiceStatus.pending) ...[
-                      const SizedBox(height: 10),
-                      OutlinedButton.icon(
-                        onPressed:
-                            _viewModel.isLoading ? null : _rejectPayment,
-                        icon: const Icon(Icons.close_outlined),
-                        label: const Text('Tu choi thanh toan'),
-                      ),
-                    ],
                   ],
                 );
               },
