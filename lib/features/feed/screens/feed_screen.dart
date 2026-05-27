@@ -80,6 +80,10 @@ class _FeedScreenState extends State<FeedScreen> {
                 ),
               ],
             ),
+            if (_viewModel.filter == FeedFilter.buildings) ...[
+              const SizedBox(height: 12),
+              _BuildingFilterBar(viewModel: _viewModel),
+            ],
             const SizedBox(height: 16),
             switch (_viewModel.filter) {
               FeedFilter.buildings => _BuildingAdList(
@@ -104,6 +108,368 @@ class _FeedScreenState extends State<FeedScreen> {
           ],
         );
       },
+    );
+  }
+}
+
+String _normalizeSearchText(Object? value) {
+  final text = value?.toString().toLowerCase() ?? '';
+  return text
+      .replaceAll(RegExp(r'[àáạảãâầấậẩẫăằắặẳẵ]'), 'a')
+      .replaceAll(RegExp(r'[èéẹẻẽêềếệểễ]'), 'e')
+      .replaceAll(RegExp(r'[ìíịỉĩ]'), 'i')
+      .replaceAll(RegExp(r'[òóọỏõôồốộổỗơờớợởỡ]'), 'o')
+      .replaceAll(RegExp(r'[ùúụủũưừứựửữ]'), 'u')
+      .replaceAll(RegExp(r'[ỳýỵỷỹ]'), 'y')
+      .replaceAll('đ', 'd');
+}
+
+class _BuildingFilterBar extends StatelessWidget {
+  const _BuildingFilterBar({required this.viewModel});
+
+  final FeedViewModel viewModel;
+
+  @override
+  Widget build(BuildContext context) {
+    final onlyAvailable =
+        viewModel.availabilityFilter == BuildingAvailabilityFilter.available;
+    final onlyWithMap = viewModel.mapFilter == BuildingMapFilter.hasLocation;
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        FilterChip(
+          selected: onlyAvailable,
+          avatar: const Icon(Icons.meeting_room_outlined, size: 18),
+          label: const Text('Con phong'),
+          onSelected: (selected) {
+            viewModel.setAvailabilityFilter(
+              selected
+                  ? BuildingAvailabilityFilter.available
+                  : BuildingAvailabilityFilter.all,
+            );
+          },
+        ),
+        ActionChip(
+          avatar: const Icon(Icons.payments_outlined, size: 18),
+          label: Text(_priceLabel(viewModel.priceFilter)),
+          onPressed: () => _showPriceSheet(context),
+        ),
+        ActionChip(
+          avatar: const Icon(Icons.location_on_outlined, size: 18),
+          label: Text(_areaLabel(viewModel.areaFilter)),
+          onPressed: () => _showAreaSheet(context),
+        ),
+        FilterChip(
+          selected: onlyWithMap,
+          avatar: const Icon(Icons.map_outlined, size: 18),
+          label: const Text('Co ban do'),
+          onSelected: (selected) {
+            viewModel.setMapFilter(
+              selected ? BuildingMapFilter.hasLocation : BuildingMapFilter.all,
+            );
+          },
+        ),
+        ActionChip(
+          avatar: const Icon(Icons.sort_outlined, size: 18),
+          label: Text(_sortLabel(viewModel.sortOption)),
+          onPressed: () => _showSortSheet(context),
+        ),
+        if (viewModel.hasBuildingFilters)
+          ActionChip(
+            avatar: const Icon(Icons.refresh_outlined, size: 18),
+            label: const Text('Dat lai'),
+            onPressed: viewModel.resetBuildingFilters,
+          ),
+      ],
+    );
+  }
+
+  void _showAreaSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const _SheetHeader(title: 'Loc theo khu vuc'),
+              _AreaOption(
+                value: BuildingAreaFilter.all,
+                groupValue: viewModel.areaFilter,
+                title: 'Tat ca khu vuc',
+                onChanged: (value) => _selectArea(context, value),
+              ),
+              _AreaOption(
+                value: BuildingAreaFilter.daNang,
+                groupValue: viewModel.areaFilter,
+                title: 'Da Nang',
+                onChanged: (value) => _selectArea(context, value),
+              ),
+              _AreaOption(
+                value: BuildingAreaFilter.nguHanhSon,
+                groupValue: viewModel.areaFilter,
+                title: 'Ngu Hanh Son',
+                onChanged: (value) => _selectArea(context, value),
+              ),
+              _AreaOption(
+                value: BuildingAreaFilter.haiChau,
+                groupValue: viewModel.areaFilter,
+                title: 'Hai Chau',
+                onChanged: (value) => _selectArea(context, value),
+              ),
+              _AreaOption(
+                value: BuildingAreaFilter.sonTra,
+                groupValue: viewModel.areaFilter,
+                title: 'Son Tra',
+                onChanged: (value) => _selectArea(context, value),
+              ),
+              _AreaOption(
+                value: BuildingAreaFilter.thanhKhe,
+                groupValue: viewModel.areaFilter,
+                title: 'Thanh Khe',
+                onChanged: (value) => _selectArea(context, value),
+              ),
+              _AreaOption(
+                value: BuildingAreaFilter.lienChieu,
+                groupValue: viewModel.areaFilter,
+                title: 'Lien Chieu',
+                onChanged: (value) => _selectArea(context, value),
+              ),
+              _AreaOption(
+                value: BuildingAreaFilter.camLe,
+                groupValue: viewModel.areaFilter,
+                title: 'Cam Le',
+                onChanged: (value) => _selectArea(context, value),
+              ),
+              _AreaOption(
+                value: BuildingAreaFilter.hoaVang,
+                groupValue: viewModel.areaFilter,
+                title: 'Hoa Vang',
+                onChanged: (value) => _selectArea(context, value),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showPriceSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const _SheetHeader(title: 'Loc theo gia phong'),
+              _PriceOption(
+                value: BuildingPriceFilter.all,
+                groupValue: viewModel.priceFilter,
+                title: 'Tat ca',
+                onChanged: (value) => _selectPrice(context, value),
+              ),
+              _PriceOption(
+                value: BuildingPriceFilter.under2m,
+                groupValue: viewModel.priceFilter,
+                title: 'Duoi 2 trieu',
+                onChanged: (value) => _selectPrice(context, value),
+              ),
+              _PriceOption(
+                value: BuildingPriceFilter.from2mTo4m,
+                groupValue: viewModel.priceFilter,
+                title: 'Tu 2 den 4 trieu',
+                onChanged: (value) => _selectPrice(context, value),
+              ),
+              _PriceOption(
+                value: BuildingPriceFilter.above4m,
+                groupValue: viewModel.priceFilter,
+                title: 'Tren 4 trieu',
+                onChanged: (value) => _selectPrice(context, value),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showSortSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const _SheetHeader(title: 'Sap xep quang cao'),
+              _SortOption(
+                value: BuildingSortOption.newest,
+                groupValue: viewModel.sortOption,
+                title: 'Moi nhat',
+                onChanged: (value) => _selectSort(context, value),
+              ),
+              _SortOption(
+                value: BuildingSortOption.priceAsc,
+                groupValue: viewModel.sortOption,
+                title: 'Gia thap den cao',
+                onChanged: (value) => _selectSort(context, value),
+              ),
+              _SortOption(
+                value: BuildingSortOption.priceDesc,
+                groupValue: viewModel.sortOption,
+                title: 'Gia cao den thap',
+                onChanged: (value) => _selectSort(context, value),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _selectArea(BuildContext context, BuildingAreaFilter? value) {
+    if (value == null) return;
+    viewModel.setAreaFilter(value);
+    Navigator.pop(context);
+  }
+
+  void _selectPrice(BuildContext context, BuildingPriceFilter? value) {
+    if (value == null) return;
+    viewModel.setPriceFilter(value);
+    Navigator.pop(context);
+  }
+
+  void _selectSort(BuildContext context, BuildingSortOption? value) {
+    if (value == null) return;
+    viewModel.setSortOption(value);
+    Navigator.pop(context);
+  }
+
+  static String _priceLabel(BuildingPriceFilter filter) {
+    return switch (filter) {
+      BuildingPriceFilter.all => 'Gia',
+      BuildingPriceFilter.under2m => 'Duoi 2 tr',
+      BuildingPriceFilter.from2mTo4m => '2-4 tr',
+      BuildingPriceFilter.above4m => 'Tren 4 tr',
+    };
+  }
+
+  static String _areaLabel(BuildingAreaFilter filter) {
+    return switch (filter) {
+      BuildingAreaFilter.all => 'Khu vuc',
+      BuildingAreaFilter.daNang => 'Da Nang',
+      BuildingAreaFilter.nguHanhSon => 'Ngu Hanh Son',
+      BuildingAreaFilter.haiChau => 'Hai Chau',
+      BuildingAreaFilter.sonTra => 'Son Tra',
+      BuildingAreaFilter.thanhKhe => 'Thanh Khe',
+      BuildingAreaFilter.lienChieu => 'Lien Chieu',
+      BuildingAreaFilter.camLe => 'Cam Le',
+      BuildingAreaFilter.hoaVang => 'Hoa Vang',
+    };
+  }
+
+  static String _sortLabel(BuildingSortOption option) {
+    return switch (option) {
+      BuildingSortOption.newest => 'Moi nhat',
+      BuildingSortOption.priceAsc => 'Gia thap',
+      BuildingSortOption.priceDesc => 'Gia cao',
+    };
+  }
+}
+
+class _SheetHeader extends StatelessWidget {
+  const _SheetHeader({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          title,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AreaOption extends StatelessWidget {
+  const _AreaOption({
+    required this.value,
+    required this.groupValue,
+    required this.title,
+    required this.onChanged,
+  });
+
+  final BuildingAreaFilter value;
+  final BuildingAreaFilter groupValue;
+  final String title;
+  final ValueChanged<BuildingAreaFilter?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return RadioListTile<BuildingAreaFilter>(
+      value: value,
+      groupValue: groupValue,
+      title: Text(title),
+      onChanged: onChanged,
+    );
+  }
+}
+
+class _PriceOption extends StatelessWidget {
+  const _PriceOption({
+    required this.value,
+    required this.groupValue,
+    required this.title,
+    required this.onChanged,
+  });
+
+  final BuildingPriceFilter value;
+  final BuildingPriceFilter groupValue;
+  final String title;
+  final ValueChanged<BuildingPriceFilter?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return RadioListTile<BuildingPriceFilter>(
+      value: value,
+      groupValue: groupValue,
+      title: Text(title),
+      onChanged: onChanged,
+    );
+  }
+}
+
+class _SortOption extends StatelessWidget {
+  const _SortOption({
+    required this.value,
+    required this.groupValue,
+    required this.title,
+    required this.onChanged,
+  });
+
+  final BuildingSortOption value;
+  final BuildingSortOption groupValue;
+  final String title;
+  final ValueChanged<BuildingSortOption?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return RadioListTile<BuildingSortOption>(
+      value: value,
+      groupValue: groupValue,
+      title: Text(title),
+      onChanged: onChanged,
     );
   }
 }
@@ -138,14 +504,17 @@ class _BuildingAdList extends StatelessWidget {
         }
 
         final buildings = (snapshot.data?.docs ?? [])
-            .where((doc) => _matchesBuilding(doc.data(), query))
+            .where((doc) => _matchesBuildingSearch(doc.data(), query))
+            .where((doc) => _matchesArea(doc.data(), viewModel.areaFilter))
+            .where((doc) => _matchesAvailability(
+                  doc.data(),
+                  viewModel.availabilityFilter,
+                ))
+            .where((doc) => _matchesMap(doc.data(), viewModel.mapFilter))
+            .where((doc) => _matchesPrice(doc.data(), viewModel.priceFilter))
             .toList();
 
-        buildings.sort((a, b) {
-          final left = _timestampMillis(a.data()['adUpdatedAt']);
-          final right = _timestampMillis(b.data()['adUpdatedAt']);
-          return right.compareTo(left);
-        });
+        _sortBuildings(buildings, viewModel.sortOption);
 
         if (buildings.isEmpty) {
           return const _FeedEmptyState(
@@ -169,18 +538,192 @@ class _BuildingAdList extends StatelessWidget {
     );
   }
 
-  static bool _matchesBuilding(Map<String, dynamic> data, String query) {
-    if (query.isEmpty) return true;
+  static bool _matchesBuildingSearch(Map<String, dynamic> data, String query) {
+    final normalizedQuery = _normalizeSearchText(query);
+    if (normalizedQuery.isEmpty) return true;
     final haystack = [
       data['name'],
       data['address'],
+      data['formattedAddress'],
+      data['district'],
+      data['ward'],
+      data['city'],
       data['description'],
       data['adminName'],
       data['phone'],
       data['email'],
-    ].map((value) => value?.toString().toLowerCase() ?? '').join(' ');
+    ].map(_normalizeSearchText).join(' ');
 
-    return haystack.contains(query);
+    return haystack.contains(normalizedQuery);
+  }
+
+  static bool _matchesArea(
+    Map<String, dynamic> data,
+    BuildingAreaFilter filter,
+  ) {
+    if (filter == BuildingAreaFilter.all) return true;
+
+    final haystack = [
+      data['address'],
+      data['formattedAddress'],
+      data['district'],
+      data['ward'],
+      data['city'],
+      data['description'],
+    ].map(_normalizeSearchText).join(' ');
+
+    return switch (filter) {
+      BuildingAreaFilter.all => true,
+      BuildingAreaFilter.daNang =>
+        haystack.contains('da nang') || haystack.contains('danang'),
+      BuildingAreaFilter.nguHanhSon => haystack.contains('ngu hanh son'),
+      BuildingAreaFilter.haiChau => haystack.contains('hai chau'),
+      BuildingAreaFilter.sonTra => haystack.contains('son tra'),
+      BuildingAreaFilter.thanhKhe => haystack.contains('thanh khe'),
+      BuildingAreaFilter.lienChieu => haystack.contains('lien chieu'),
+      BuildingAreaFilter.camLe => haystack.contains('cam le'),
+      BuildingAreaFilter.hoaVang => haystack.contains('hoa vang'),
+    };
+  }
+
+  static bool _matchesAvailability(
+    Map<String, dynamic> data,
+    BuildingAvailabilityFilter filter,
+  ) {
+    if (filter == BuildingAvailabilityFilter.all) return true;
+
+    final availableRooms = _optionalInt(data['availableRoomCount']) ??
+        _optionalInt(data['availableRooms']) ??
+        _optionalInt(data['emptyRoomCount']) ??
+        _optionalInt(data['emptyRooms']) ??
+        _optionalInt(data['vacantRoomCount']) ??
+        _optionalInt(data['vacantRooms']);
+    if (availableRooms != null) return availableRooms > 0;
+
+    final totalRooms = _optionalInt(data['totalRooms']);
+    final occupiedRooms = _optionalInt(data['occupiedRoomCount']) ??
+        _optionalInt(data['occupiedRooms']) ??
+        _optionalInt(data['rentedRoomCount']) ??
+        _optionalInt(data['rentedRooms']);
+    if (totalRooms != null && occupiedRooms != null) {
+      return totalRooms > occupiedRooms;
+    }
+
+    final status = [
+      data['availabilityStatus'],
+      data['roomStatus'],
+      data['status'],
+    ].map((value) => value?.toString().toLowerCase() ?? '').join(' ');
+    if (status.contains('full') || status.contains('het')) return false;
+    if (status.contains('available') || status.contains('con')) return true;
+
+    return true;
+  }
+
+  static bool _matchesMap(
+    Map<String, dynamic> data,
+    BuildingMapFilter filter,
+  ) {
+    if (filter == BuildingMapFilter.all) return true;
+    return _hasMapLocation(data);
+  }
+
+  static bool _matchesPrice(
+    Map<String, dynamic> data,
+    BuildingPriceFilter filter,
+  ) {
+    if (filter == BuildingPriceFilter.all) return true;
+
+    final rent = _buildingRent(data);
+    if (rent <= 0) return false;
+
+    return switch (filter) {
+      BuildingPriceFilter.all => true,
+      BuildingPriceFilter.under2m => rent < 2000000,
+      BuildingPriceFilter.from2mTo4m => rent >= 2000000 && rent <= 4000000,
+      BuildingPriceFilter.above4m => rent > 4000000,
+    };
+  }
+
+  static void _sortBuildings(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> buildings,
+    BuildingSortOption option,
+  ) {
+    buildings.sort((a, b) {
+      return switch (option) {
+        BuildingSortOption.newest => _compareNewest(a, b),
+        BuildingSortOption.priceAsc => _compareRent(a, b, ascending: true),
+        BuildingSortOption.priceDesc => _compareRent(a, b, ascending: false),
+      };
+    });
+  }
+
+  static int _compareNewest(
+    QueryDocumentSnapshot<Map<String, dynamic>> a,
+    QueryDocumentSnapshot<Map<String, dynamic>> b,
+  ) {
+    final left = _timestampMillis(a.data()['adUpdatedAt']);
+    final right = _timestampMillis(b.data()['adUpdatedAt']);
+    return right.compareTo(left);
+  }
+
+  static int _compareRent(
+    QueryDocumentSnapshot<Map<String, dynamic>> a,
+    QueryDocumentSnapshot<Map<String, dynamic>> b, {
+    required bool ascending,
+  }) {
+    final left = _buildingRent(a.data());
+    final right = _buildingRent(b.data());
+    if (left <= 0 && right <= 0) return _compareNewest(a, b);
+    if (left <= 0) return 1;
+    if (right <= 0) return -1;
+    final compared = left.compareTo(right);
+    return ascending ? compared : -compared;
+  }
+
+  static int _buildingRent(Map<String, dynamic> data) {
+    for (final key in [
+      'defaultRent',
+      'minRent',
+      'roomRent',
+      'rent',
+      'price',
+    ]) {
+      final value = _moneyInt(data[key]);
+      if (value > 0) return value;
+    }
+    return 0;
+  }
+
+  static int? _optionalInt(Object? value) {
+    if (value == null) return null;
+    if (value is num) return value.toInt();
+    return int.tryParse(value.toString());
+  }
+
+  static bool _hasMapLocation(Map<String, dynamic> data) {
+    if (data['location'] is GeoPoint) return true;
+
+    final latitude = _optionalDouble(data['latitude']) ??
+        _optionalDouble(data['lat']) ??
+        _optionalDouble(data['locationLat']);
+    final longitude = _optionalDouble(data['longitude']) ??
+        _optionalDouble(data['lng']) ??
+        _optionalDouble(data['locationLng']);
+
+    return latitude != null && longitude != null;
+  }
+
+  static double? _optionalDouble(Object? value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString());
+  }
+
+  static int _moneyInt(Object? value) {
+    if (value is num) return value.toInt();
+    final digits = value?.toString().replaceAll(RegExp(r'[^0-9]'), '') ?? '';
+    return int.tryParse(digits) ?? 0;
   }
 
   static int _timestampMillis(Object? value) {
@@ -943,13 +1486,14 @@ class _UserDirectoryList extends StatelessWidget {
   }
 
   static bool _matchesUser(Map<String, dynamic> data, String query) {
-    if (query.isEmpty) return true;
+    final normalizedQuery = _normalizeSearchText(query);
+    if (normalizedQuery.isEmpty) return true;
     final haystack = [
       data['name'],
       data['email'],
       data['displayName'],
-    ].map((value) => value?.toString().toLowerCase() ?? '').join(' ');
-    return haystack.contains(query);
+    ].map(_normalizeSearchText).join(' ');
+    return haystack.contains(normalizedQuery);
   }
 
   static String _displayName(Map<String, dynamic> data) {
