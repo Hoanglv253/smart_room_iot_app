@@ -10,20 +10,6 @@ enum BuildingAvailabilityFilter { all, available }
 
 enum BuildingPriceFilter { all, under2m, from2mTo4m, above4m }
 
-enum BuildingAreaFilter {
-  all,
-  daNang,
-  nguHanhSon,
-  haiChau,
-  sonTra,
-  thanhKhe,
-  lienChieu,
-  camLe,
-  hoaVang,
-}
-
-enum BuildingMapFilter { all, hasLocation }
-
 enum BuildingSortOption { newest, priceAsc, priceDesc }
 
 class FeedViewModel extends BaseViewModel {
@@ -35,23 +21,23 @@ class FeedViewModel extends BaseViewModel {
   BuildingAvailabilityFilter _availabilityFilter =
       BuildingAvailabilityFilter.all;
   BuildingPriceFilter _priceFilter = BuildingPriceFilter.all;
-  BuildingAreaFilter _areaFilter = BuildingAreaFilter.all;
-  BuildingMapFilter _mapFilter = BuildingMapFilter.all;
+  String _provinceFilter = '';
+  String _wardFilter = '';
   BuildingSortOption _sortOption = BuildingSortOption.newest;
   String _query = '';
 
   FeedFilter get filter => _filter;
   BuildingAvailabilityFilter get availabilityFilter => _availabilityFilter;
   BuildingPriceFilter get priceFilter => _priceFilter;
-  BuildingAreaFilter get areaFilter => _areaFilter;
-  BuildingMapFilter get mapFilter => _mapFilter;
+  String get provinceFilter => _provinceFilter;
+  String get wardFilter => _wardFilter;
   BuildingSortOption get sortOption => _sortOption;
   String get query => _query;
   bool get hasBuildingFilters =>
       _availabilityFilter != BuildingAvailabilityFilter.all ||
       _priceFilter != BuildingPriceFilter.all ||
-      _areaFilter != BuildingAreaFilter.all ||
-      _mapFilter != BuildingMapFilter.all ||
+      _provinceFilter.isNotEmpty ||
+      _wardFilter.isNotEmpty ||
       _sortOption != BuildingSortOption.newest;
 
   void setFilter(FeedFilter filter) {
@@ -79,15 +65,17 @@ class FeedViewModel extends BaseViewModel {
     notifyListeners();
   }
 
-  void setAreaFilter(BuildingAreaFilter filter) {
-    if (_areaFilter == filter) return;
-    _areaFilter = filter;
+  void setProvinceFilter(String value) {
+    final normalized = value.trim();
+    if (_provinceFilter == normalized) return;
+    _provinceFilter = normalized;
     notifyListeners();
   }
 
-  void setMapFilter(BuildingMapFilter filter) {
-    if (_mapFilter == filter) return;
-    _mapFilter = filter;
+  void setWardFilter(String value) {
+    final normalized = value.trim();
+    if (_wardFilter == normalized) return;
+    _wardFilter = normalized;
     notifyListeners();
   }
 
@@ -101,8 +89,8 @@ class FeedViewModel extends BaseViewModel {
     if (!hasBuildingFilters) return;
     _availabilityFilter = BuildingAvailabilityFilter.all;
     _priceFilter = BuildingPriceFilter.all;
-    _areaFilter = BuildingAreaFilter.all;
-    _mapFilter = BuildingMapFilter.all;
+    _provinceFilter = '';
+    _wardFilter = '';
     _sortOption = BuildingSortOption.newest;
     notifyListeners();
   }

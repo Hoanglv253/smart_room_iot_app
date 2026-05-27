@@ -21,8 +21,6 @@ class BuildingLocationPickerScreen extends StatefulWidget {
 class _BuildingLocationPickerScreenState
     extends State<BuildingLocationPickerScreen> {
   static const _defaultPosition = LatLng(10.7769, 106.7009);
-  static const _daNangPosition = LatLng(16.0471, 108.2068);
-  static const _nguHanhSonPosition = LatLng(16.0037, 108.2648);
 
   final _addressController = TextEditingController();
   final _mapService = MapService();
@@ -99,13 +97,20 @@ class _BuildingLocationPickerScreenState
     var formattedAddress = location.formattedAddress;
     var placeId = location.placeId;
 
-    if (_expectsDaNang(address) && !_isInDaNangArea(target)) {
-      target = _suggestedPositionForAddress(address);
-      formattedAddress = address;
-      placeId = '';
-      _showSnack(
-        'Google tra ve sai khu vuc, da dua ban do ve Da Nang. Hay cham dung vi tri toa nha roi luu.',
-      );
+    if (MapService.isOutsideExpectedProvince(
+      address,
+      target.latitude,
+      target.longitude,
+    )) {
+      final suggested = MapService.suggestedLocationForAddress(address);
+      if (suggested != null) {
+        target = LatLng(suggested.latitude, suggested.longitude);
+        formattedAddress = suggested.formattedAddress;
+        placeId = '';
+        _showSnack(
+          'Google tra ve sai khu vuc, da dua ban do ve ${suggested.formattedAddress}. Hay cham dung vi tri toa nha roi luu.',
+        );
+      }
     }
 
     setState(() {
@@ -116,9 +121,7 @@ class _BuildingLocationPickerScreenState
     });
 
     await _mapController?.animateCamera(
-      CameraUpdate.newCameraPosition(
-        CameraPosition(target: target, zoom: 17),
-      ),
+      CameraUpdate.newCameraPosition(CameraPosition(target: target, zoom: 17)),
     );
   }
 
@@ -167,9 +170,9 @@ class _BuildingLocationPickerScreenState
   }
 
   void _showSnack(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   String _formatSearchError(Object error) {
@@ -204,10 +207,7 @@ class _BuildingLocationPickerScreenState
       appBar: AppBar(
         title: const Text('Chon vi tri toa nha'),
         actions: [
-          TextButton(
-            onPressed: _saveSelection,
-            child: const Text('Luu'),
-          ),
+          TextButton(onPressed: _saveSelection, child: const Text('Luu')),
         ],
       ),
       body: Column(
@@ -252,20 +252,17 @@ class _BuildingLocationPickerScreenState
               markers: {marker},
               onMapCreated: (controller) {
                 _mapController = controller;
-                Future<void>.delayed(
-                  const Duration(milliseconds: 350),
-                  () {
-                    if (!mounted) return;
-                    controller.animateCamera(
-                      CameraUpdate.newCameraPosition(
-                        CameraPosition(
-                          target: _selectedPosition,
-                          zoom: _selectedPosition == _defaultPosition ? 12 : 17,
-                        ),
+                Future<void>.delayed(const Duration(milliseconds: 350), () {
+                  if (!mounted) return;
+                  controller.animateCamera(
+                    CameraUpdate.newCameraPosition(
+                      CameraPosition(
+                        target: _selectedPosition,
+                        zoom: _selectedPosition == _defaultPosition ? 12 : 17,
                       ),
-                    );
-                  },
-                );
+                    ),
+                  );
+                });
               },
               onTap: _selectPosition,
               mapType: MapType.normal,
@@ -285,8 +282,8 @@ class _BuildingLocationPickerScreenState
                   Text(
                     'Da chon: ${_selectedPosition.latitude.toStringAsFixed(6)}, ${_selectedPosition.longitude.toStringAsFixed(6)}',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   const SizedBox(height: 6),
                   Text(
@@ -321,60 +318,11 @@ class _BuildingLocationPickerScreenState
   }
 
   static LatLng _suggestedPositionForAddress(String address) {
-    final normalized = _normalize(address);
-    if (normalized.contains('ngu hanh son')) return _nguHanhSonPosition;
-    if (normalized.contains('da nang')) return _daNangPosition;
+    final suggested = MapService.suggestedLocationForAddress(address);
+    if (suggested != null) {
+      return LatLng(suggested.latitude, suggested.longitude);
+    }
     return _defaultPosition;
-  }
-
-  static bool _expectsDaNang(String address) {
-    final normalized = _normalize(address);
-    return normalized.contains('da nang') ||
-        normalized.contains('ngu hanh son') ||
-        normalized.contains('ngu hanh');
-  }
-
-  static bool _isInDaNangArea(LatLng position) {
-    return position.latitude >= 15.75 &&
-        position.latitude <= 16.35 &&
-        position.longitude >= 107.8 &&
-        position.longitude <= 108.55;
-  }
-
-  static String _normalize(String value) {
-    return value
-        .toLowerCase()
-        .replaceAll(
-          RegExp('[\\u00E0\\u00E1\\u1EA1\\u1EA3\\u00E3'
-              '\\u00E2\\u1EA7\\u1EA5\\u1EAD\\u1EA9\\u1EAB'
-              '\\u0103\\u1EB1\\u1EAF\\u1EB7\\u1EB3\\u1EB5]'),
-          'a',
-        )
-        .replaceAll(
-          RegExp('[\\u00E8\\u00E9\\u1EB9\\u1EBB\\u1EBD'
-              '\\u00EA\\u1EC1\\u1EBF\\u1EC7\\u1EC3\\u1EC5]'),
-          'e',
-        )
-        .replaceAll(
-          RegExp('[\\u00EC\\u00ED\\u1ECB\\u1EC9\\u0129]'),
-          'i',
-        )
-        .replaceAll(
-          RegExp('[\\u00F2\\u00F3\\u1ECD\\u1ECF\\u00F5'
-              '\\u00F4\\u1ED3\\u1ED1\\u1ED9\\u1ED5\\u1ED7'
-              '\\u01A1\\u1EDD\\u1EDB\\u1EE3\\u1EDF\\u1EE1]'),
-          'o',
-        )
-        .replaceAll(
-          RegExp('[\\u00F9\\u00FA\\u1EE5\\u1EE7\\u0169'
-              '\\u01B0\\u1EEB\\u1EE9\\u1EF1\\u1EED\\u1EEF]'),
-          'u',
-        )
-        .replaceAll(
-          RegExp('[\\u1EF3\\u00FD\\u1EF5\\u1EF7\\u1EF9]'),
-          'y',
-        )
-        .replaceAll(RegExp('[\\u0111]'), 'd');
   }
 
   static String _text(Object? value, String fallback) {
