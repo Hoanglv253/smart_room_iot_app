@@ -80,7 +80,10 @@ class _BuildingLocationPickerScreenState
     } catch (error) {
       if (!mounted) return;
       setState(() => _isSearching = false);
-      _showSnack('Khong tim duoc dia chi: $error');
+      if (_isGoogleApiConfigurationError(error)) {
+        await _moveToSuggestedArea();
+      }
+      _showSnack(_formatSearchError(error));
       return;
     }
 
@@ -167,6 +170,26 @@ class _BuildingLocationPickerScreenState
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
     );
+  }
+
+  String _formatSearchError(Object error) {
+    final message = error.toString();
+    if (message.contains('REQUEST_DENIED') &&
+        message.contains('not activated')) {
+      return 'Chua bat Geocoding API tren Google Cloud nen chua tim duoc dia chi.';
+    }
+
+    if (message.contains('REQUEST_DENIED')) {
+      return 'Google tu choi API key. Kiem tra Geocoding API va gioi han API key.';
+    }
+
+    return 'Khong tim duoc dia chi. Kiem tra Google Maps API key va mang.';
+  }
+
+  bool _isGoogleApiConfigurationError(Object error) {
+    final message = error.toString();
+    return message.contains('REQUEST_DENIED') ||
+        message.contains('not activated');
   }
 
   @override
