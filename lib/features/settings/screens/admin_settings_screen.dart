@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/data/vietnam_admin_units.dart';
 import '../view_models/admin_settings_view_model.dart';
 import 'admin_ad_settings_screen.dart';
 import 'building_location_picker_screen.dart';
@@ -22,6 +23,8 @@ class AdminSettingsScreen extends StatefulWidget {
 class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   final _nameController = TextEditingController();
   final _addressController = TextEditingController();
+  final _provinceController = TextEditingController();
+  final _wardController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
@@ -83,6 +86,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   void dispose() {
     _nameController.dispose();
     _addressController.dispose();
+    _provinceController.dispose();
+    _wardController.dispose();
     _descriptionController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
@@ -150,6 +155,11 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     _selectedLocation = _readMap(data['location']);
     _setText(_nameController, data['name']);
     _setText(_addressController, data['address']);
+    _setText(
+      _provinceController,
+      data['province'] ?? _selectedLocation['province'],
+    );
+    _setText(_wardController, data['ward'] ?? _selectedLocation['ward']);
     _setText(_descriptionController, data['description']);
     _setText(_phoneController, data['phone']);
     _setText(_emailController, data['email']);
@@ -312,9 +322,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     if (!mounted) return;
 
     if (data == null) {
-      _showSnack(
-        _viewModel.errorMessage ?? 'Khong luu duoc cau hinh PayOS.',
-      );
+      _showSnack(_viewModel.errorMessage ?? 'Khong luu duoc cau hinh PayOS.');
       setState(() => _isPayosSaving = false);
       return;
     }
@@ -339,9 +347,21 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     final roomsPerFloor = _readInt(_roomsPerFloorController);
     final totalRooms = _effectiveTotalRooms;
     final defaultRent = _readInt(_defaultRentController);
+    final province = _provinceController.text.trim();
+    final ward = _wardController.text.trim();
 
     if (buildingName.isEmpty) {
       _showSnack('Hay nhap ten toa nha.');
+      return;
+    }
+
+    if (province.isEmpty) {
+      _showSnack('Hay chon tinh/thanh pho cua toa nha.');
+      return;
+    }
+
+    if (ward.isEmpty) {
+      _showSnack('Hay nhap xa/phuong cua toa nha.');
       return;
     }
 
@@ -383,10 +403,21 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     if (mounted) setState(() => _isSaving = false);
   }
 
+  String _fullBuildingAddress() {
+    return [
+      _addressController.text.trim(),
+      _wardController.text.trim(),
+      _provinceController.text.trim(),
+    ].where((part) => part.isNotEmpty).join(', ');
+  }
+
   Future<Map<String, dynamic>> _locationForSave() async {
     final selectedLat = _readDouble(_selectedLocation['lat']);
     final selectedLng = _readDouble(_selectedLocation['lng']);
     final address = _addressController.text.trim();
+    final province = _provinceController.text.trim();
+    final ward = _wardController.text.trim();
+    final fullAddress = _fullBuildingAddress();
 
     if (selectedLat != null && selectedLng != null) {
       final formattedAddress =
@@ -395,8 +426,11 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       return {
         ..._selectedLocation,
         'address': address,
+        'province': province,
+        'ward': ward,
+        'fullAddress': fullAddress,
         'formattedAddress': formattedAddress.isEmpty
-            ? address
+            ? (fullAddress.isEmpty ? address : fullAddress)
             : formattedAddress,
         'lat': selectedLat,
         'lng': selectedLng,
@@ -404,7 +438,22 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       };
     }
 
-    return _viewModel.resolveBuildingLocation(address);
+    final resolved = await _viewModel.resolveBuildingLocation(
+      fullAddress.isEmpty ? address : fullAddress,
+    );
+    final resolvedFormatted =
+        resolved['formattedAddress']?.toString().trim() ?? '';
+
+    return {
+      ...resolved,
+      'address': address,
+      'province': province,
+      'ward': ward,
+      'fullAddress': fullAddress,
+      'formattedAddress': resolvedFormatted.isEmpty
+          ? (fullAddress.isEmpty ? address : fullAddress)
+          : resolvedFormatted,
+    };
   }
 
   Map<String, dynamic> _buildingData({
@@ -420,6 +469,11 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       'adminName': widget.user.displayName ?? widget.user.email ?? 'Admin',
       'name': buildingName,
       'address': _addressController.text.trim(),
+      'province': _provinceController.text.trim(),
+      'ward': _wardController.text.trim(),
+      'provinceNormalized': normalizeVietnamAdminText(_provinceController.text),
+      'wardNormalized': normalizeVietnamAdminText(_wardController.text),
+      'fullAddress': _fullBuildingAddress(),
       'description': _descriptionController.text.trim(),
       'phone': _phoneController.text.trim(),
       'email': _emailController.text.trim(),
@@ -484,8 +538,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       return _settingsErrorMessage(
         permissionMessage:
             'Da luu toa nha va phong, nhung Firestore chua cap quyen ghi chats.',
-        fallbackMessage:
-            'Da luu toa nha va phong, nhung chua tao duoc chat.',
+        fallbackMessage: 'Da luu toa nha va phong, nhung chua tao duoc chat.',
       );
     }
 
@@ -508,9 +561,9 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
 
   void _showSnack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _openAdSettings() {
@@ -522,20 +575,28 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
 
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => AdminAdSettingsScreen(
-          user: widget.user,
-          buildingId: buildingId,
-        ),
+        builder: (_) =>
+            AdminAdSettingsScreen(user: widget.user, buildingId: buildingId),
       ),
     );
   }
 
   Future<void> _openLocationPicker() async {
+    final fullAddress = _fullBuildingAddress();
+    final initialLocation = {
+      ..._selectedLocation,
+      'province': _provinceController.text.trim(),
+      'ward': _wardController.text.trim(),
+      'fullAddress': fullAddress,
+    };
+
     final result = await Navigator.of(context).push<Map<String, dynamic>>(
       MaterialPageRoute(
         builder: (_) => BuildingLocationPickerScreen(
-          initialAddress: _addressController.text,
-          initialLocation: _selectedLocation,
+          initialAddress: fullAddress.isEmpty
+              ? _addressController.text
+              : fullAddress,
+          initialLocation: initialLocation,
         ),
       ),
     );
@@ -544,8 +605,15 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
 
     final address = result['address']?.toString().trim() ?? '';
     setState(() {
-      _selectedLocation = result;
-      if (address.isNotEmpty) _addressController.text = address;
+      _selectedLocation = {
+        ...result,
+        'province': _provinceController.text.trim(),
+        'ward': _wardController.text.trim(),
+        'fullAddress': _fullBuildingAddress(),
+      };
+      if (address.isNotEmpty && _addressController.text.trim().isEmpty) {
+        _addressController.text = address;
+      }
     });
   }
 
@@ -589,16 +657,16 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       children: [
         Text(
           'Thiet lap toa nha',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 4),
         Text(
           'Du lieu o day se duoc dung cho phong, hoa don, tim kiem va phe duyet sau nay.',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.black54,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: Colors.black54),
         ),
         const SizedBox(height: 16),
         OutlinedButton.icon(
@@ -611,20 +679,39 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           title: 'Thong tin chung',
           children: [
             _buildTextField(_nameController, 'Ten toa nha'),
+            _buildProvinceDropdown(),
+            _buildTextField(
+              _wardController,
+              'Xa/phuong',
+              helperText: 'Dung cho bo loc khu vuc va dia chi moi.',
+              onChanged: (_) => setState(() {
+                _selectedLocation = {
+                  ..._selectedLocation,
+                  'province': _provinceController.text.trim(),
+                  'ward': _wardController.text.trim(),
+                  'fullAddress': _fullBuildingAddress(),
+                };
+              }),
+            ),
             _buildTextField(
               _addressController,
-              'Dia chi toa nha',
-              helperText: 'Dung cho Google Maps va chi duong.',
+              'Dia chi chi tiet',
+              helperText:
+                  'So nha, ten duong; sau do chon vi tri chinh xac tren map.',
+              onChanged: (_) => setState(() {
+                _selectedLocation = {
+                  ..._selectedLocation,
+                  'province': _provinceController.text.trim(),
+                  'ward': _wardController.text.trim(),
+                  'fullAddress': _fullBuildingAddress(),
+                };
+              }),
             ),
             _LocationPickerButton(
               location: _selectedLocation,
               onPressed: _openLocationPicker,
             ),
-            _buildTextField(
-              _descriptionController,
-              'Mo ta ngan',
-              maxLines: 3,
-            ),
+            _buildTextField(_descriptionController, 'Mo ta ngan', maxLines: 3),
             _buildTextField(
               _phoneController,
               'So dien thoai lien he',
@@ -724,7 +811,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
             _buildTextField(
               _bankIdController,
               'Ma ngan hang VietQR',
-              helperText: 'Nhap BIN hoac code ngan hang, vi du MB, VCB, 970436.',
+              helperText:
+                  'Nhap BIN hoac code ngan hang, vi du MB, VCB, 970436.',
             ),
             _buildTextField(
               _bankAccountNumberController,
@@ -746,7 +834,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           children: [
             _PayosStatusBox(
               configured: _isPayosConfigured,
-              message: _payosStatusMessage ??
+              message:
+                  _payosStatusMessage ??
                   'PayOS se tu xac nhan hoa don khi ngan hang bao giao dich.',
             ),
             const SizedBox(height: 12),
@@ -785,7 +874,11 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         _SettingsSection(
           title: 'Tien ich',
           children: [
-            _buildSwitch('Wifi', _wifi, (value) => setState(() => _wifi = value)),
+            _buildSwitch(
+              'Wifi',
+              _wifi,
+              (value) => setState(() => _wifi = value),
+            ),
             _buildSwitch(
               'Thang may',
               _elevator,
@@ -866,11 +959,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         _SettingsSection(
           title: 'Noi quy',
           children: [
-            _buildTextField(
-              _rulesController,
-              'Noi quy toa nha',
-              maxLines: 5,
-            ),
+            _buildTextField(_rulesController, 'Noi quy toa nha', maxLines: 5),
           ],
         ),
         const SizedBox(height: 8),
@@ -886,6 +975,44 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           label: const Text('Luu thiet lap'),
         ),
       ],
+    );
+  }
+
+  Widget _buildProvinceDropdown() {
+    final currentValue = _provinceController.text.trim();
+    final names =
+        currentValue.isNotEmpty && !vietnamProvinceNames.contains(currentValue)
+        ? [currentValue, ...vietnamProvinceNames]
+        : vietnamProvinceNames;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: DropdownButtonFormField<String>(
+        initialValue: currentValue.isEmpty ? null : currentValue,
+        isExpanded: true,
+        decoration: const InputDecoration(
+          labelText: 'Tinh/thanh pho',
+          helperText: 'Dung cho bo loc khu vuc va dia chi moi.',
+          border: OutlineInputBorder(),
+        ),
+        items: names
+            .map(
+              (name) =>
+                  DropdownMenuItem<String>(value: name, child: Text(name)),
+            )
+            .toList(),
+        onChanged: (value) {
+          setState(() {
+            _provinceController.text = value ?? '';
+            _selectedLocation = {
+              ..._selectedLocation,
+              'province': _provinceController.text.trim(),
+              'ward': _wardController.text.trim(),
+              'fullAddress': _fullBuildingAddress(),
+            };
+          });
+        },
+      ),
     );
   }
 
@@ -917,11 +1044,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     );
   }
 
-  Widget _buildSwitch(
-    String title,
-    bool value,
-    ValueChanged<bool> onChanged,
-  ) {
+  Widget _buildSwitch(String title, bool value, ValueChanged<bool> onChanged) {
     return SwitchListTile(
       contentPadding: EdgeInsets.zero,
       title: Text(title),
@@ -962,9 +1085,9 @@ class _LocationPickerButton extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               'Toa do da chon: ${lat.toStringAsFixed(6)}, ${lng.toStringAsFixed(6)}',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.black54,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: Colors.black54),
             ),
           ],
         ],
@@ -979,10 +1102,7 @@ class _LocationPickerButton extends StatelessWidget {
 }
 
 class _PayosStatusBox extends StatelessWidget {
-  const _PayosStatusBox({
-    required this.configured,
-    required this.message,
-  });
+  const _PayosStatusBox({required this.configured, required this.message});
 
   final bool configured;
   final String message;
@@ -995,9 +1115,9 @@ class _PayosStatusBox extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.35)),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1031,9 +1151,9 @@ class _SettingsSection extends StatelessWidget {
           children: [
             Text(
               title,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
             ...children,

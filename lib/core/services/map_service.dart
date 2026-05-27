@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
+import '../data/vietnam_admin_units.dart';
+
 class MapLocationResult {
   const MapLocationResult({
     required this.address,
@@ -32,6 +34,61 @@ class MapLocationResult {
   }
 }
 
+class _ProvinceSearchHint {
+  const _ProvinceSearchHint({
+    required this.name,
+    this.centerLat,
+    this.centerLng,
+    this.minLat,
+    this.maxLat,
+    this.minLng,
+    this.maxLng,
+    required this.aliases,
+  });
+
+  final String name;
+  final double? centerLat;
+  final double? centerLng;
+  final double? minLat;
+  final double? maxLat;
+  final double? minLng;
+  final double? maxLng;
+  final List<String> aliases;
+
+  bool matches(String normalizedAddress) {
+    return aliases.any(normalizedAddress.contains);
+  }
+
+  bool get hasBounds =>
+      minLat != null && maxLat != null && minLng != null && maxLng != null;
+
+  bool get hasCenter => centerLat != null && centerLng != null;
+
+  bool contains(double latitude, double longitude) {
+    if (!hasBounds) return true;
+    return latitude >= minLat! &&
+        latitude <= maxLat! &&
+        longitude >= minLng! &&
+        longitude <= maxLng!;
+  }
+
+  String? get bounds {
+    if (!hasBounds) return null;
+    return '$minLat,$minLng|$maxLat,$maxLng';
+  }
+
+  MapLocationResult? fallbackResult(String originalAddress) {
+    if (!hasCenter) return null;
+    return MapLocationResult(
+      address: originalAddress,
+      formattedAddress: '$name, Viet Nam',
+      latitude: centerLat!,
+      longitude: centerLng!,
+      placeId: '',
+    );
+  }
+}
+
 class MapService {
   static const _configChannel = MethodChannel('smart_room_iot_app/config');
   static const _googleMapsApiKey = String.fromEnvironment(
@@ -39,6 +96,44 @@ class MapService {
     defaultValue: '',
   );
   static String? _cachedNativeGoogleMapsApiKey;
+
+  static const _provinceSearchHints = <_ProvinceSearchHint>[
+    _ProvinceSearchHint(
+      name: 'Da Nang',
+      centerLat: 16.0471,
+      centerLng: 108.2068,
+      minLat: 15.75,
+      maxLat: 16.35,
+      minLng: 107.8,
+      maxLng: 108.55,
+      aliases: ['da nang', 'ngu hanh son', 'ngu hanh'],
+    ),
+    _ProvinceSearchHint(
+      name: 'Dak Lak',
+      centerLat: 12.7100,
+      centerLng: 108.2378,
+      minLat: 11.85,
+      maxLat: 13.45,
+      minLng: 107.45,
+      maxLng: 109.15,
+      aliases: [
+        'dak lak',
+        'dak lawk',
+        'dak lac',
+        'dac lak',
+        'dac lac',
+        'buon ma thuot',
+      ],
+    ),
+  ];
+
+  static final _genericProvinceSearchHints = <_ProvinceSearchHint>[
+    for (final province in vietnamProvinces)
+      _ProvinceSearchHint(
+        name: province.name,
+        aliases: _provinceAliases(province.name),
+      ),
+  ];
 
   static Future<bool> hasGoogleMapsApiKey() async {
     return (await googleMapsApiKey()).isNotEmpty;
@@ -51,9 +146,7 @@ class MapService {
     }
 
     try {
-      final key = await _configChannel.invokeMethod<String>(
-        'googleMapsApiKey',
-      );
+      final key = await _configChannel.invokeMethod<String>('googleMapsApiKey');
       _cachedNativeGoogleMapsApiKey = key?.trim() ?? '';
     } on PlatformException {
       _cachedNativeGoogleMapsApiKey = '';
@@ -69,6 +162,7 @@ class MapService {
     final apiKey = await googleMapsApiKey();
     if (trimmedAddress.isEmpty || apiKey.isEmpty) return null;
 
+    final provinceHint = _provinceHintForAddress(trimmedAddress);
     MapLocationResult? bestResult;
     var bestScore = -1000000;
     String? lastStatus;
@@ -116,7 +210,18 @@ class MapService {
       }
     }
 
-    if (bestResult != null) return bestResult;
+    if (bestResult != null) {
+      if (provinceHint == null ||
+          provinceHint.contains(bestResult.latitude, bestResult.longitude)) {
+        return bestResult;
+      }
+
+      return provinceHint.fallbackResult(trimmedAddress) ?? bestResult;
+    }
+
+    final fallbackResult = provinceHint?.fallbackResult(trimmedAddress);
+    if (fallbackResult != null) return fallbackResult;
+
     if (lastStatus != null && lastStatus != 'ZERO_RESULTS') {
       throw Exception(
         'Google Geocoding $lastStatus'
@@ -186,6 +291,7 @@ class MapService {
   }
 
   static Uri _geocodeUri(String query, String originalAddress, String apiKey) {
+    final provinceHint = _provinceHintForAddress(originalAddress);
     final params = <String, String>{
       'address': query,
       'language': 'vi',
@@ -194,26 +300,22 @@ class MapService {
       'key': apiKey,
     };
 
-    if (_isDaNangQuery(originalAddress)) {
-      params['bounds'] = '15.75,107.8|16.35,108.55';
+    final bounds = provinceHint?.bounds;
+    if (bounds != null) {
+      params['bounds'] = bounds;
     }
 
-    return Uri.https(
-      'maps.googleapis.com',
-      '/maps/api/geocode/json',
-      params,
-    );
+    return Uri.https('maps.googleapis.com', '/maps/api/geocode/json', params);
   }
 
   static List<String> _addressQueries(String address) {
     final normalized = _normalize(address);
-    final queries = <String>[
-      address,
-      '$address, Viet Nam',
-    ];
+    final provinceHint = _provinceHintForAddress(address);
+    final queries = <String>[address, '$address, Viet Nam'];
 
-    if (_isDaNangQuery(address)) {
-      queries.insert(0, '$address, Da Nang, Viet Nam');
+    if (provinceHint != null) {
+      queries.insert(0, '${provinceHint.name}, Viet Nam');
+      queries.insert(0, '$address, ${provinceHint.name}, Viet Nam');
     }
 
     if (normalized.contains('ngu hanh son')) {
@@ -249,11 +351,17 @@ class MapService {
   static int _scoreResult(MapLocationResult result, String originalAddress) {
     final normalizedQuery = _normalize(originalAddress);
     final normalizedAddress = _normalize(result.formattedAddress);
+    final provinceHint = _provinceHintForAddress(originalAddress);
     var score = 0;
 
-    if (_isDaNangQuery(originalAddress)) {
-      score += _isInDaNangArea(result.latitude, result.longitude) ? 1000 : -1000;
-      if (normalizedAddress.contains('da nang')) score += 200;
+    if (provinceHint != null) {
+      score += provinceHint.contains(result.latitude, result.longitude)
+          ? 1000
+          : -2000;
+      if (normalizedAddress.contains(_normalize(provinceHint.name)) ||
+          provinceHint.aliases.any(normalizedAddress.contains)) {
+        score += 300;
+      }
     }
 
     if (normalizedQuery.contains('ngu hanh son')) {
@@ -268,53 +376,92 @@ class MapService {
     return score;
   }
 
-  static bool _isDaNangQuery(String address) {
-    final normalized = _normalize(address);
-    return normalized.contains('da nang') ||
-        normalized.contains('ngu hanh son') ||
-        normalized.contains('ngu hanh');
+  static MapLocationResult? suggestedLocationForAddress(String address) {
+    final provinceHint = _provinceHintForAddress(address);
+    if (provinceHint == null) return null;
+    return provinceHint.fallbackResult(address.trim());
   }
 
-  static bool _isInDaNangArea(double latitude, double longitude) {
-    return latitude >= 15.75 &&
-        latitude <= 16.35 &&
-        longitude >= 107.8 &&
-        longitude <= 108.55;
+  static bool isOutsideExpectedProvince(
+    String address,
+    double latitude,
+    double longitude,
+  ) {
+    final provinceHint = _provinceHintForAddress(address);
+    if (provinceHint == null || !provinceHint.hasBounds) return false;
+    return !provinceHint.contains(latitude, longitude);
+  }
+
+  static _ProvinceSearchHint? _provinceHintForAddress(String address) {
+    final normalized = _normalize(address);
+    for (final hint in _provinceSearchHints) {
+      if (hint.matches(normalized)) return hint;
+    }
+    for (final hint in _genericProvinceSearchHints) {
+      if (hint.matches(normalized)) return hint;
+    }
+    return null;
+  }
+
+  static List<String> _provinceAliases(String provinceName) {
+    final normalized = _normalize(provinceName);
+    final aliases = <String>{normalized};
+
+    for (final prefix in const ['tp ', 'tinh ', 'thanh pho ']) {
+      if (normalized.startsWith(prefix)) {
+        aliases.add(normalized.substring(prefix.length));
+      }
+    }
+
+    if (normalized == 'tp ho chi minh') {
+      aliases.addAll({
+        'ho chi minh',
+        'hcm',
+        'tp hcm',
+        'tphcm',
+        'sai gon',
+        'saigon',
+      });
+    }
+
+    return aliases.toList(growable: false);
   }
 
   static String _normalize(String value) {
     return value
         .toLowerCase()
         .replaceAll(
-          RegExp('[\\u00E0\\u00E1\\u1EA1\\u1EA3\\u00E3'
-              '\\u00E2\\u1EA7\\u1EA5\\u1EAD\\u1EA9\\u1EAB'
-              '\\u0103\\u1EB1\\u1EAF\\u1EB7\\u1EB3\\u1EB5]'),
+          RegExp(
+            '[\\u00E0\\u00E1\\u1EA1\\u1EA3\\u00E3'
+            '\\u00E2\\u1EA7\\u1EA5\\u1EAD\\u1EA9\\u1EAB'
+            '\\u0103\\u1EB1\\u1EAF\\u1EB7\\u1EB3\\u1EB5]',
+          ),
           'a',
         )
         .replaceAll(
-          RegExp('[\\u00E8\\u00E9\\u1EB9\\u1EBB\\u1EBD'
-              '\\u00EA\\u1EC1\\u1EBF\\u1EC7\\u1EC3\\u1EC5]'),
+          RegExp(
+            '[\\u00E8\\u00E9\\u1EB9\\u1EBB\\u1EBD'
+            '\\u00EA\\u1EC1\\u1EBF\\u1EC7\\u1EC3\\u1EC5]',
+          ),
           'e',
         )
+        .replaceAll(RegExp('[\\u00EC\\u00ED\\u1ECB\\u1EC9\\u0129]'), 'i')
         .replaceAll(
-          RegExp('[\\u00EC\\u00ED\\u1ECB\\u1EC9\\u0129]'),
-          'i',
-        )
-        .replaceAll(
-          RegExp('[\\u00F2\\u00F3\\u1ECD\\u1ECF\\u00F5'
-              '\\u00F4\\u1ED3\\u1ED1\\u1ED9\\u1ED5\\u1ED7'
-              '\\u01A1\\u1EDD\\u1EDB\\u1EE3\\u1EDF\\u1EE1]'),
+          RegExp(
+            '[\\u00F2\\u00F3\\u1ECD\\u1ECF\\u00F5'
+            '\\u00F4\\u1ED3\\u1ED1\\u1ED9\\u1ED5\\u1ED7'
+            '\\u01A1\\u1EDD\\u1EDB\\u1EE3\\u1EDF\\u1EE1]',
+          ),
           'o',
         )
         .replaceAll(
-          RegExp('[\\u00F9\\u00FA\\u1EE5\\u1EE7\\u0169'
-              '\\u01B0\\u1EEB\\u1EE9\\u1EF1\\u1EED\\u1EEF]'),
+          RegExp(
+            '[\\u00F9\\u00FA\\u1EE5\\u1EE7\\u0169'
+            '\\u01B0\\u1EEB\\u1EE9\\u1EF1\\u1EED\\u1EEF]',
+          ),
           'u',
         )
-        .replaceAll(
-          RegExp('[\\u1EF3\\u00FD\\u1EF5\\u1EF7\\u1EF9]'),
-          'y',
-        )
+        .replaceAll(RegExp('[\\u1EF3\\u00FD\\u1EF5\\u1EF7\\u1EF9]'), 'y')
         .replaceAll(RegExp('[\\u0111]'), 'd');
   }
 }

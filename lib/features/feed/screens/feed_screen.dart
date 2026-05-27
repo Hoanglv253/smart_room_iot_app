@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/data/vietnam_admin_units.dart';
 import '../../../core/services/app_firestore_service.dart';
 import '../../../core/services/map_service.dart';
 import '../../../core/widgets/building_map_preview.dart';
@@ -10,11 +11,7 @@ import '../../profile/screens/profile_screen.dart';
 import '../view_models/feed_view_model.dart';
 
 class FeedScreen extends StatefulWidget {
-  const FeedScreen({
-    required this.user,
-    required this.role,
-    super.key,
-  });
+  const FeedScreen({required this.user, required this.role, super.key});
 
   final User user;
   final String role;
@@ -87,23 +84,23 @@ class _FeedScreenState extends State<FeedScreen> {
             const SizedBox(height: 16),
             switch (_viewModel.filter) {
               FeedFilter.buildings => _BuildingAdList(
-                  user: widget.user,
-                  role: widget.role,
-                  query: _viewModel.query,
-                  viewModel: _viewModel,
-                ),
+                user: widget.user,
+                role: widget.role,
+                query: _viewModel.query,
+                viewModel: _viewModel,
+              ),
               FeedFilter.managers => _UserDirectoryList(
-                  currentUser: widget.user,
-                  role: UserRole.manager,
-                  query: _viewModel.query,
-                  viewModel: _viewModel,
-                ),
+                currentUser: widget.user,
+                role: UserRole.manager,
+                query: _viewModel.query,
+                viewModel: _viewModel,
+              ),
               FeedFilter.tenants => _UserDirectoryList(
-                  currentUser: widget.user,
-                  role: UserRole.user,
-                  query: _viewModel.query,
-                  viewModel: _viewModel,
-                ),
+                currentUser: widget.user,
+                role: UserRole.user,
+                query: _viewModel.query,
+                viewModel: _viewModel,
+              ),
             },
           ],
         );
@@ -133,7 +130,6 @@ class _BuildingFilterBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final onlyAvailable =
         viewModel.availabilityFilter == BuildingAvailabilityFilter.available;
-    final onlyWithMap = viewModel.mapFilter == BuildingMapFilter.hasLocation;
 
     return Wrap(
       spacing: 8,
@@ -158,18 +154,13 @@ class _BuildingFilterBar extends StatelessWidget {
         ),
         ActionChip(
           avatar: const Icon(Icons.location_on_outlined, size: 18),
-          label: Text(_areaLabel(viewModel.areaFilter)),
-          onPressed: () => _showAreaSheet(context),
+          label: Text(_provinceLabel(viewModel.provinceFilter)),
+          onPressed: () => _showProvinceSheet(context),
         ),
-        FilterChip(
-          selected: onlyWithMap,
-          avatar: const Icon(Icons.map_outlined, size: 18),
-          label: const Text('Co ban do'),
-          onSelected: (selected) {
-            viewModel.setMapFilter(
-              selected ? BuildingMapFilter.hasLocation : BuildingMapFilter.all,
-            );
-          },
+        ActionChip(
+          avatar: const Icon(Icons.place_outlined, size: 18),
+          label: Text(_wardLabel(viewModel.wardFilter)),
+          onPressed: () => _showWardSheet(context),
         ),
         ActionChip(
           avatar: const Icon(Icons.sort_outlined, size: 18),
@@ -186,7 +177,7 @@ class _BuildingFilterBar extends StatelessWidget {
     );
   }
 
-  void _showAreaSheet(BuildContext context) {
+  void _showProvinceSheet(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
       builder: (context) {
@@ -194,66 +185,86 @@ class _BuildingFilterBar extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const _SheetHeader(title: 'Loc theo khu vuc'),
-              _AreaOption(
-                value: BuildingAreaFilter.all,
-                groupValue: viewModel.areaFilter,
-                title: 'Tat ca khu vuc',
-                onChanged: (value) => _selectArea(context, value),
-              ),
-              _AreaOption(
-                value: BuildingAreaFilter.daNang,
-                groupValue: viewModel.areaFilter,
-                title: 'Da Nang',
-                onChanged: (value) => _selectArea(context, value),
-              ),
-              _AreaOption(
-                value: BuildingAreaFilter.nguHanhSon,
-                groupValue: viewModel.areaFilter,
-                title: 'Ngu Hanh Son',
-                onChanged: (value) => _selectArea(context, value),
-              ),
-              _AreaOption(
-                value: BuildingAreaFilter.haiChau,
-                groupValue: viewModel.areaFilter,
-                title: 'Hai Chau',
-                onChanged: (value) => _selectArea(context, value),
-              ),
-              _AreaOption(
-                value: BuildingAreaFilter.sonTra,
-                groupValue: viewModel.areaFilter,
-                title: 'Son Tra',
-                onChanged: (value) => _selectArea(context, value),
-              ),
-              _AreaOption(
-                value: BuildingAreaFilter.thanhKhe,
-                groupValue: viewModel.areaFilter,
-                title: 'Thanh Khe',
-                onChanged: (value) => _selectArea(context, value),
-              ),
-              _AreaOption(
-                value: BuildingAreaFilter.lienChieu,
-                groupValue: viewModel.areaFilter,
-                title: 'Lien Chieu',
-                onChanged: (value) => _selectArea(context, value),
-              ),
-              _AreaOption(
-                value: BuildingAreaFilter.camLe,
-                groupValue: viewModel.areaFilter,
-                title: 'Cam Le',
-                onChanged: (value) => _selectArea(context, value),
-              ),
-              _AreaOption(
-                value: BuildingAreaFilter.hoaVang,
-                groupValue: viewModel.areaFilter,
-                title: 'Hoa Vang',
-                onChanged: (value) => _selectArea(context, value),
+              const _SheetHeader(title: 'Loc theo tinh/thanh'),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    _ProvinceOption(
+                      value: '',
+                      groupValue: viewModel.provinceFilter,
+                      title: 'Tat ca tinh/thanh',
+                      onChanged: (value) => _selectProvince(context, value),
+                    ),
+                    ...vietnamProvinceNames.map(
+                      (province) => _ProvinceOption(
+                        value: province,
+                        groupValue: viewModel.provinceFilter,
+                        title: province,
+                        onChanged: (value) => _selectProvince(context, value),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
         );
       },
     );
+  }
+
+  void _showWardSheet(BuildContext context) {
+    final controller = TextEditingController(text: viewModel.wardFilter);
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              bottom: MediaQuery.viewInsetsOf(context).bottom + 16,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const _SheetHeader(title: 'Loc theo xa/phuong'),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    hintText: 'Nhap ten xa/phuong',
+                    prefixIcon: Icon(Icons.place_outlined),
+                    border: OutlineInputBorder(),
+                  ),
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) =>
+                      _applyWardFilter(context, controller.text),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    TextButton(
+                      onPressed: () => _applyWardFilter(context, ''),
+                      child: const Text('Xoa'),
+                    ),
+                    const Spacer(),
+                    FilledButton(
+                      onPressed: () =>
+                          _applyWardFilter(context, controller.text),
+                      child: const Text('Ap dung'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ).whenComplete(controller.dispose);
   }
 
   void _showPriceSheet(BuildContext context) {
@@ -330,9 +341,14 @@ class _BuildingFilterBar extends StatelessWidget {
     );
   }
 
-  void _selectArea(BuildContext context, BuildingAreaFilter? value) {
+  void _selectProvince(BuildContext context, String? value) {
     if (value == null) return;
-    viewModel.setAreaFilter(value);
+    viewModel.setProvinceFilter(value);
+    Navigator.pop(context);
+  }
+
+  void _applyWardFilter(BuildContext context, String value) {
+    viewModel.setWardFilter(value);
     Navigator.pop(context);
   }
 
@@ -357,19 +373,11 @@ class _BuildingFilterBar extends StatelessWidget {
     };
   }
 
-  static String _areaLabel(BuildingAreaFilter filter) {
-    return switch (filter) {
-      BuildingAreaFilter.all => 'Khu vuc',
-      BuildingAreaFilter.daNang => 'Da Nang',
-      BuildingAreaFilter.nguHanhSon => 'Ngu Hanh Son',
-      BuildingAreaFilter.haiChau => 'Hai Chau',
-      BuildingAreaFilter.sonTra => 'Son Tra',
-      BuildingAreaFilter.thanhKhe => 'Thanh Khe',
-      BuildingAreaFilter.lienChieu => 'Lien Chieu',
-      BuildingAreaFilter.camLe => 'Cam Le',
-      BuildingAreaFilter.hoaVang => 'Hoa Vang',
-    };
-  }
+  static String _provinceLabel(String value) =>
+      value.trim().isEmpty ? 'Tinh/thanh' : value.trim();
+
+  static String _wardLabel(String value) =>
+      value.trim().isEmpty ? 'Xa/phuong' : value.trim();
 
   static String _sortLabel(BuildingSortOption option) {
     return switch (option) {
@@ -393,35 +401,39 @@ class _SheetHeader extends StatelessWidget {
         alignment: Alignment.centerLeft,
         child: Text(
           title,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
         ),
       ),
     );
   }
 }
 
-class _AreaOption extends StatelessWidget {
-  const _AreaOption({
+class _ProvinceOption extends StatelessWidget {
+  const _ProvinceOption({
     required this.value,
     required this.groupValue,
     required this.title,
     required this.onChanged,
   });
 
-  final BuildingAreaFilter value;
-  final BuildingAreaFilter groupValue;
+  final String value;
+  final String groupValue;
   final String title;
-  final ValueChanged<BuildingAreaFilter?> onChanged;
+  final ValueChanged<String?> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return RadioListTile<BuildingAreaFilter>(
-      value: value,
-      groupValue: groupValue,
+    final selected = value == groupValue;
+
+    return ListTile(
       title: Text(title),
-      onChanged: onChanged,
+      trailing: selected
+          ? const Icon(Icons.check, color: Color(0xFF365A9B))
+          : null,
+      selected: selected,
+      onTap: () => onChanged(value),
     );
   }
 }
@@ -441,11 +453,15 @@ class _PriceOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RadioListTile<BuildingPriceFilter>(
-      value: value,
-      groupValue: groupValue,
+    final selected = value == groupValue;
+
+    return ListTile(
       title: Text(title),
-      onChanged: onChanged,
+      trailing: selected
+          ? const Icon(Icons.check, color: Color(0xFF365A9B))
+          : null,
+      selected: selected,
+      onTap: () => onChanged(value),
     );
   }
 }
@@ -465,11 +481,15 @@ class _SortOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RadioListTile<BuildingSortOption>(
-      value: value,
-      groupValue: groupValue,
+    final selected = value == groupValue;
+
+    return ListTile(
       title: Text(title),
-      onChanged: onChanged,
+      trailing: selected
+          ? const Icon(Icons.check, color: Color(0xFF365A9B))
+          : null,
+      selected: selected,
+      onTap: () => onChanged(value),
     );
   }
 }
@@ -505,12 +525,19 @@ class _BuildingAdList extends StatelessWidget {
 
         final buildings = (snapshot.data?.docs ?? [])
             .where((doc) => _matchesBuildingSearch(doc.data(), query))
-            .where((doc) => _matchesArea(doc.data(), viewModel.areaFilter))
-            .where((doc) => _matchesAvailability(
-                  doc.data(),
-                  viewModel.availabilityFilter,
-                ))
-            .where((doc) => _matchesMap(doc.data(), viewModel.mapFilter))
+            .where(
+              (doc) => _matchesArea(
+                doc.data(),
+                province: viewModel.provinceFilter,
+                ward: viewModel.wardFilter,
+              ),
+            )
+            .where(
+              (doc) => _matchesAvailability(
+                doc.data(),
+                viewModel.availabilityFilter,
+              ),
+            )
             .where((doc) => _matchesPrice(doc.data(), viewModel.priceFilter))
             .toList();
 
@@ -538,16 +565,37 @@ class _BuildingAdList extends StatelessWidget {
     );
   }
 
+  static Map<String, dynamic> _readMap(Object? value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) {
+      return value.map((key, dynamic value) => MapEntry(key.toString(), value));
+    }
+    return {};
+  }
+
   static bool _matchesBuildingSearch(Map<String, dynamic> data, String query) {
     final normalizedQuery = _normalizeSearchText(query);
     if (normalizedQuery.isEmpty) return true;
+    final location = _readMap(data['location']);
     final haystack = [
       data['name'],
       data['address'],
+      data['fullAddress'],
       data['formattedAddress'],
+      data['province'],
+      data['provinceName'],
       data['district'],
       data['ward'],
+      data['wardName'],
       data['city'],
+      location['address'],
+      location['fullAddress'],
+      location['formattedAddress'],
+      location['province'],
+      location['provinceName'],
+      location['ward'],
+      location['wardName'],
+      location['city'],
       data['description'],
       data['adminName'],
       data['phone'],
@@ -558,32 +606,51 @@ class _BuildingAdList extends StatelessWidget {
   }
 
   static bool _matchesArea(
-    Map<String, dynamic> data,
-    BuildingAreaFilter filter,
-  ) {
-    if (filter == BuildingAreaFilter.all) return true;
+    Map<String, dynamic> data, {
+    required String province,
+    required String ward,
+  }) {
+    final normalizedProvince = _normalizeSearchText(province);
+    final normalizedWard = _normalizeSearchText(ward);
+    if (normalizedProvince.isEmpty && normalizedWard.isEmpty) return true;
 
-    final haystack = [
-      data['address'],
-      data['formattedAddress'],
-      data['district'],
-      data['ward'],
+    final location = _readMap(data['location']);
+    final provinceText = [
+      data['province'],
+      data['provinceName'],
       data['city'],
-      data['description'],
+      location['province'],
+      location['provinceName'],
+      location['city'],
+      data['address'],
+      data['fullAddress'],
+      data['formattedAddress'],
+      location['address'],
+      location['fullAddress'],
+      location['formattedAddress'],
     ].map(_normalizeSearchText).join(' ');
 
-    return switch (filter) {
-      BuildingAreaFilter.all => true,
-      BuildingAreaFilter.daNang =>
-        haystack.contains('da nang') || haystack.contains('danang'),
-      BuildingAreaFilter.nguHanhSon => haystack.contains('ngu hanh son'),
-      BuildingAreaFilter.haiChau => haystack.contains('hai chau'),
-      BuildingAreaFilter.sonTra => haystack.contains('son tra'),
-      BuildingAreaFilter.thanhKhe => haystack.contains('thanh khe'),
-      BuildingAreaFilter.lienChieu => haystack.contains('lien chieu'),
-      BuildingAreaFilter.camLe => haystack.contains('cam le'),
-      BuildingAreaFilter.hoaVang => haystack.contains('hoa vang'),
-    };
+    final wardText = [
+      data['ward'],
+      data['wardName'],
+      location['ward'],
+      location['wardName'],
+      data['address'],
+      data['fullAddress'],
+      data['formattedAddress'],
+      location['address'],
+      location['fullAddress'],
+      location['formattedAddress'],
+    ].map(_normalizeSearchText).join(' ');
+
+    if (normalizedProvince.isNotEmpty &&
+        !provinceText.contains(normalizedProvince)) {
+      return false;
+    }
+    if (normalizedWard.isNotEmpty && !wardText.contains(normalizedWard)) {
+      return false;
+    }
+    return true;
   }
 
   static bool _matchesAvailability(
@@ -592,7 +659,8 @@ class _BuildingAdList extends StatelessWidget {
   ) {
     if (filter == BuildingAvailabilityFilter.all) return true;
 
-    final availableRooms = _optionalInt(data['availableRoomCount']) ??
+    final availableRooms =
+        _optionalInt(data['availableRoomCount']) ??
         _optionalInt(data['availableRooms']) ??
         _optionalInt(data['emptyRoomCount']) ??
         _optionalInt(data['emptyRooms']) ??
@@ -601,7 +669,8 @@ class _BuildingAdList extends StatelessWidget {
     if (availableRooms != null) return availableRooms > 0;
 
     final totalRooms = _optionalInt(data['totalRooms']);
-    final occupiedRooms = _optionalInt(data['occupiedRoomCount']) ??
+    final occupiedRooms =
+        _optionalInt(data['occupiedRoomCount']) ??
         _optionalInt(data['occupiedRooms']) ??
         _optionalInt(data['rentedRoomCount']) ??
         _optionalInt(data['rentedRooms']);
@@ -618,14 +687,6 @@ class _BuildingAdList extends StatelessWidget {
     if (status.contains('available') || status.contains('con')) return true;
 
     return true;
-  }
-
-  static bool _matchesMap(
-    Map<String, dynamic> data,
-    BuildingMapFilter filter,
-  ) {
-    if (filter == BuildingMapFilter.all) return true;
-    return _hasMapLocation(data);
   }
 
   static bool _matchesPrice(
@@ -682,13 +743,7 @@ class _BuildingAdList extends StatelessWidget {
   }
 
   static int _buildingRent(Map<String, dynamic> data) {
-    for (final key in [
-      'defaultRent',
-      'minRent',
-      'roomRent',
-      'rent',
-      'price',
-    ]) {
+    for (final key in ['defaultRent', 'minRent', 'roomRent', 'rent', 'price']) {
       final value = _moneyInt(data[key]);
       if (value > 0) return value;
     }
@@ -699,25 +754,6 @@ class _BuildingAdList extends StatelessWidget {
     if (value == null) return null;
     if (value is num) return value.toInt();
     return int.tryParse(value.toString());
-  }
-
-  static bool _hasMapLocation(Map<String, dynamic> data) {
-    if (data['location'] is GeoPoint) return true;
-
-    final latitude = _optionalDouble(data['latitude']) ??
-        _optionalDouble(data['lat']) ??
-        _optionalDouble(data['locationLat']);
-    final longitude = _optionalDouble(data['longitude']) ??
-        _optionalDouble(data['lng']) ??
-        _optionalDouble(data['locationLng']);
-
-    return latitude != null && longitude != null;
-  }
-
-  static double? _optionalDouble(Object? value) {
-    if (value == null) return null;
-    if (value is num) return value.toDouble();
-    return double.tryParse(value.toString());
   }
 
   static int _moneyInt(Object? value) {
@@ -780,7 +816,10 @@ class _BuildingAdCard extends StatelessWidget {
               children: [
                 const CircleAvatar(
                   backgroundColor: Color(0xFFE0F2FE),
-                  child: Icon(Icons.apartment_outlined, color: Color(0xFF2563EB)),
+                  child: Icon(
+                    Icons.apartment_outlined,
+                    color: Color(0xFF2563EB),
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -789,12 +828,14 @@ class _BuildingAdCard extends StatelessWidget {
                     children: [
                       Text(
                         name,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 3),
-                      Text(address, style: const TextStyle(color: Colors.black54)),
+                      Text(
+                        address,
+                        style: const TextStyle(color: Colors.black54),
+                      ),
                     ],
                   ),
                 ),
@@ -845,10 +886,7 @@ class _BuildingAdCard extends StatelessWidget {
             ),
             if (showFullDetails) ...[
               const SizedBox(height: 12),
-              _RoomStatusBoard(
-                buildingId: buildingId,
-                viewModel: viewModel,
-              ),
+              _RoomStatusBoard(buildingId: buildingId, viewModel: viewModel),
               const SizedBox(height: 12),
               Text(
                 'Lien he: $phone - $email',
@@ -990,11 +1028,8 @@ class _BuildingAdCard extends StatelessWidget {
 
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => ChatDetailScreen(
-          chatId: chatId,
-          chatTitle: title,
-          user: user,
-        ),
+        builder: (_) =>
+            ChatDetailScreen(chatId: chatId, chatTitle: title, user: user),
       ),
     );
   }
@@ -1003,9 +1038,9 @@ class _BuildingAdCard extends StatelessWidget {
     final opened = await MapService.openDirectionsForBuilding(building);
     if (!context.mounted || opened) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Khong mo duoc Google Maps.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Khong mo duoc Google Maps.')));
   }
 
   static String _text(Object? value, String fallback) {
@@ -1077,9 +1112,9 @@ class _BuildingAdDetailScreen extends StatelessWidget {
         children: [
           Text(
             name,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
           _BuildingAdCard(
@@ -1162,9 +1197,9 @@ class _BuildingCommentsSectionState extends State<_BuildingCommentsSection> {
             const SizedBox(width: 6),
             Text(
               'Binh luan',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
             ),
           ],
         ),
@@ -1285,10 +1320,7 @@ class _CommentBubble extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            authorName,
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
+          Text(authorName, style: const TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 2),
           Text(text),
         ],
@@ -1298,10 +1330,7 @@ class _CommentBubble extends StatelessWidget {
 }
 
 class _RoomStatusBoard extends StatelessWidget {
-  const _RoomStatusBoard({
-    required this.buildingId,
-    required this.viewModel,
-  });
+  const _RoomStatusBoard({required this.buildingId, required this.viewModel});
 
   final String buildingId;
   final FeedViewModel viewModel;
@@ -1371,7 +1400,9 @@ class _RoomStatusBoard extends StatelessWidget {
               physics: const NeverScrollableScrollPhysics(),
               itemCount: rooms.length,
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: MediaQuery.of(context).size.width >= 560 ? 3 : 2,
+                crossAxisCount: MediaQuery.of(context).size.width >= 560
+                    ? 3
+                    : 2,
                 crossAxisSpacing: 10,
                 mainAxisSpacing: 10,
                 childAspectRatio: 0.88,
@@ -1397,7 +1428,9 @@ class _RoomStatusBoard extends StatelessWidget {
     final tenantName = (room['tenantName'] ?? '').toString();
     if (tenantId.isNotEmpty || tenantName.isNotEmpty) return 'occupied';
     final status = (room['status'] ?? 'available').toString();
-    if (status == 'occupied' || status == 'maintenance' || status == 'reserved') {
+    if (status == 'occupied' ||
+        status == 'maintenance' ||
+        status == 'reserved') {
       return status;
     }
     return 'available';
@@ -1535,7 +1568,9 @@ class _UserDirectoryCard extends StatelessWidget {
           [
             UserRole.label(role),
             if (email.isNotEmpty) email,
-            buildingId.isEmpty ? 'Chua tham gia toa nha' : 'Da tham gia toa nha',
+            buildingId.isEmpty
+                ? 'Chua tham gia toa nha'
+                : 'Da tham gia toa nha',
           ].join(' - '),
         ),
         onTap: () => _openProfile(context, name, email),
@@ -1652,13 +1687,15 @@ class _FeedRoomAdTile extends StatelessWidget {
         children: [
           Expanded(
             child: ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(12),
+              ),
               child: coverImageUrl.isEmpty
                   ? const _FeedRoomImagePlaceholder()
                   : Image.network(
                       coverImageUrl,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) =>
+                      errorBuilder: (context, error, stackTrace) =>
                           const _FeedRoomImagePlaceholder(),
                     ),
             ),
@@ -1748,10 +1785,7 @@ class _StatusSummaryChip extends StatelessWidget {
     return Chip(
       avatar: CircleAvatar(
         backgroundColor: color.withValues(alpha: 0.15),
-        child: Text(
-          '$value',
-          style: TextStyle(color: color, fontSize: 12),
-        ),
+        child: Text('$value', style: TextStyle(color: color, fontSize: 12)),
       ),
       label: Text(label),
     );
@@ -1759,10 +1793,7 @@ class _StatusSummaryChip extends StatelessWidget {
 }
 
 class _FeedEmptyState extends StatelessWidget {
-  const _FeedEmptyState({
-    required this.icon,
-    required this.message,
-  });
+  const _FeedEmptyState({required this.icon, required this.message});
 
   final IconData icon;
   final String message;
