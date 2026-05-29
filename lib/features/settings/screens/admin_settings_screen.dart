@@ -3,7 +3,13 @@ import 'package:flutter/material.dart';
 
 import '../../../core/data/vietnam_admin_units.dart';
 import '../view_models/admin_settings_view_model.dart';
+import 'admin_access_display_settings_screen.dart';
 import 'admin_ad_settings_screen.dart';
+import 'admin_building_info_settings_screen.dart';
+import 'admin_payment_settings_screen.dart';
+import 'admin_room_billing_settings_screen.dart';
+import 'admin_rules_settings_screen.dart';
+import 'admin_settings_widgets.dart';
 import 'building_location_picker_screen.dart';
 
 const _payosBackendBaseUrl = String.fromEnvironment(
@@ -581,7 +587,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     );
   }
 
-  Future<void> _openLocationPicker() async {
+  Future<Map<String, dynamic>?> _openLocationPicker() async {
     final fullAddress = _fullBuildingAddress();
     final initialLocation = {
       ..._selectedLocation,
@@ -601,20 +607,24 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       ),
     );
 
-    if (!mounted || result == null) return;
+    if (!mounted || result == null) return null;
 
     final address = result['address']?.toString().trim() ?? '';
+    final nextLocation = {
+      ...result,
+      'province': _provinceController.text.trim(),
+      'ward': _wardController.text.trim(),
+      'fullAddress': _fullBuildingAddress(),
+    };
+
     setState(() {
-      _selectedLocation = {
-        ...result,
-        'province': _provinceController.text.trim(),
-        'ward': _wardController.text.trim(),
-        'fullAddress': _fullBuildingAddress(),
-      };
+      _selectedLocation = nextLocation;
       if (address.isNotEmpty && _addressController.text.trim().isEmpty) {
         _addressController.text = address;
       }
     });
+
+    return nextLocation;
   }
 
   void _setText(TextEditingController controller, Object? value) {
@@ -644,8 +654,256 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     return {};
   }
 
+  void _syncLocationFields() {
+    if (!mounted) return;
+    setState(() {
+      _selectedLocation = {
+        ..._selectedLocation,
+        'province': _provinceController.text.trim(),
+        'ward': _wardController.text.trim(),
+        'fullAddress': _fullBuildingAddress(),
+      };
+    });
+  }
+
+  void _openSettingsPage(Widget page) {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => page)).then((
+      _,
+    ) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  void _openBuildingInfoSettings() {
+    _openSettingsPage(
+      AdminBuildingInfoSettingsScreen(
+        nameController: _nameController,
+        provinceController: _provinceController,
+        wardController: _wardController,
+        addressController: _addressController,
+        descriptionController: _descriptionController,
+        phoneController: _phoneController,
+        emailController: _emailController,
+        selectedLocation: _selectedLocation,
+        onLocationFieldsChanged: _syncLocationFields,
+        onPickLocation: _openLocationPicker,
+        onSave: _saveBuilding,
+      ),
+    );
+  }
+
+  void _openRoomBillingSettings() {
+    _openSettingsPage(
+      AdminRoomBillingSettingsScreen(
+        floorCountController: _floorCountController,
+        roomsPerFloorController: _roomsPerFloorController,
+        totalRoomsController: _totalRoomsController,
+        defaultRentController: _defaultRentController,
+        electricityPriceController: _electricityPriceController,
+        waterPriceController: _waterPriceController,
+        serviceFeeController: _serviceFeeController,
+        internetFeeController: _internetFeeController,
+        parkingFeeController: _parkingFeeController,
+        billCloseDayController: _billCloseDayController,
+        billDueDayController: _billDueDayController,
+        effectiveTotalRooms: () => _effectiveTotalRooms,
+        onSave: _saveBuilding,
+      ),
+    );
+  }
+
+  void _openPaymentSettings() {
+    _openSettingsPage(
+      AdminPaymentSettingsScreen(
+        bankNameController: _bankNameController,
+        bankIdController: _bankIdController,
+        bankAccountNumberController: _bankAccountNumberController,
+        bankAccountHolderController: _bankAccountHolderController,
+        transferContentController: _transferContentController,
+        payosClientIdController: _payosClientIdController,
+        payosApiKeyController: _payosApiKeyController,
+        payosChecksumKeyController: _payosChecksumKeyController,
+        payosConfigured: _isPayosConfigured,
+        payosStatusMessage: _payosStatusMessage,
+        onSaveBuilding: _saveBuilding,
+        onSavePayosSettings: _savePayosSettings,
+        getPayosConfigured: () => _isPayosConfigured,
+        getPayosStatusMessage: () => _payosStatusMessage,
+      ),
+    );
+  }
+
+  void _openAccessDisplaySettings() {
+    _openSettingsPage(
+      AdminAccessDisplaySettingsScreen(
+        wifi: _wifi,
+        elevator: _elevator,
+        camera: _camera,
+        parking: _parking,
+        laundry: _laundry,
+        security: _security,
+        isPublic: _isPublic,
+        allowPreJoinMessage: _allowPreJoinMessage,
+        allowTenantJoinRequest: _allowTenantJoinRequest,
+        allowManagerApplication: _allowManagerApplication,
+        requireApproval: _requireApproval,
+        autoJoinGroupChat: _autoJoinGroupChat,
+        showAddress: _showAddress,
+        showRoomPrice: _showRoomPrice,
+        showAvailableRooms: _showAvailableRooms,
+        onWifiChanged: (value) => setState(() => _wifi = value),
+        onElevatorChanged: (value) => setState(() => _elevator = value),
+        onCameraChanged: (value) => setState(() => _camera = value),
+        onParkingChanged: (value) => setState(() => _parking = value),
+        onLaundryChanged: (value) => setState(() => _laundry = value),
+        onSecurityChanged: (value) => setState(() => _security = value),
+        onPublicChanged: (value) => setState(() => _isPublic = value),
+        onAllowPreJoinMessageChanged: (value) =>
+            setState(() => _allowPreJoinMessage = value),
+        onAllowTenantJoinRequestChanged: (value) =>
+            setState(() => _allowTenantJoinRequest = value),
+        onAllowManagerApplicationChanged: (value) =>
+            setState(() => _allowManagerApplication = value),
+        onRequireApprovalChanged: (value) =>
+            setState(() => _requireApproval = value),
+        onAutoJoinGroupChatChanged: (value) =>
+            setState(() => _autoJoinGroupChat = value),
+        onShowAddressChanged: (value) => setState(() => _showAddress = value),
+        onShowRoomPriceChanged: (value) =>
+            setState(() => _showRoomPrice = value),
+        onShowAvailableRoomsChanged: (value) =>
+            setState(() => _showAvailableRooms = value),
+        onSave: _saveBuilding,
+      ),
+    );
+  }
+
+  void _openRulesSettings() {
+    _openSettingsPage(
+      AdminRulesSettingsScreen(
+        rulesController: _rulesController,
+        onSave: _saveBuilding,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
+
+    if (_loadError != null) {
+      return AdminPermissionErrorView(
+        message: _loadError!,
+        onRetry: _loadBuilding,
+      );
+    }
+
+    final buildingName = _nameController.text.trim();
+    final province = _provinceController.text.trim();
+    final ward = _wardController.text.trim();
+    final area = [ward, province].where((part) => part.isNotEmpty).join(', ');
+    final floorCount = _readInt(_floorCountController);
+    final totalRooms = _effectiveTotalRooms;
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text(
+          'Thiet lap toa nha',
+          style: Theme.of(
+            context,
+          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Da chia thanh cac muc nho de man hinh nhe hon va de tim lai thong tin.',
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: Colors.black54),
+        ),
+        const SizedBox(height: 16),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  buildingName.isEmpty ? 'Chua dat ten toa nha' : buildingName,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  area.isEmpty ? 'Chua chon khu vuc' : area,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: Colors.black54),
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    Chip(label: Text('$totalRooms phong')),
+                    Chip(label: Text('$floorCount tang')),
+                    Chip(
+                      label: Text(
+                        _isPayosConfigured
+                            ? 'PayOS da cau hinh'
+                            : 'PayOS chua cau hinh',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        AdminSettingsMenuTile(
+          icon: Icons.apartment_outlined,
+          title: 'Thong tin toa nha',
+          subtitle: 'Ten, lien he, tinh/xa va vi tri chinh xac tren map.',
+          onTap: _openBuildingInfoSettings,
+        ),
+        AdminSettingsMenuTile(
+          icon: Icons.meeting_room_outlined,
+          title: 'Phong va gia',
+          subtitle: 'So tang, so phong, tien thue va gia dich vu.',
+          onTap: _openRoomBillingSettings,
+        ),
+        AdminSettingsMenuTile(
+          icon: Icons.payments_outlined,
+          title: 'Thanh toan',
+          subtitle: 'Thong tin chuyen khoan va cau hinh PayOS cua toa nha.',
+          onTap: _openPaymentSettings,
+        ),
+        AdminSettingsMenuTile(
+          icon: Icons.campaign_outlined,
+          title: 'Thiet lap quang cao',
+          subtitle: 'Noi dung quang cao va anh phong hien tren trang chu.',
+          onTap: _openAdSettings,
+        ),
+        AdminSettingsMenuTile(
+          icon: Icons.verified_user_outlined,
+          title: 'Tien ich va quyen',
+          subtitle: 'Tien ich, xin vao toa nha, hien dia chi va gia phong.',
+          onTap: _openAccessDisplaySettings,
+        ),
+        AdminSettingsMenuTile(
+          icon: Icons.article_outlined,
+          title: 'Noi quy',
+          subtitle: 'Noi quy chung cua toa nha.',
+          onTap: _openRulesSettings,
+        ),
+      ],
+    );
+  }
+
+  // ignore: unused_element
+  Widget _legacyBuild(BuildContext context) {
     if (_isLoading) return const Center(child: CircularProgressIndicator());
 
     if (_loadError != null) {
