@@ -131,7 +131,7 @@ function appBaseUrl(request) {
     return `${protocol}://${host}`;
   }
 
-  return 'https://asia-southeast1-smart-room-iot-353c5.cloudfunctions.net/api';
+  return 'https://asia-southeast1-unified-chess-496306-u1.cloudfunctions.net/api';
 }
 
 function readString(value) {
