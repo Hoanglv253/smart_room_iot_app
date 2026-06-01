@@ -75,11 +75,11 @@ https://your-backend-domain.com/payos-webhook
 Van co the deploy cung backend nay len Firebase Functions. Khi do URL backend se la:
 
 ```text
-https://asia-southeast1-smart-room-iot-353c5.cloudfunctions.net/api
+https://asia-southeast1-unified-chess-496306-u1.cloudfunctions.net/api
 ```
 
 Va webhook PayOS la:
 
 ```text
-https://asia-southeast1-smart-room-iot-353c5.cloudfunctions.net/api/payos-webhook
+https://asia-southeast1-unified-chess-496306-u1.cloudfunctions.net/api/payos-webhook
 ```

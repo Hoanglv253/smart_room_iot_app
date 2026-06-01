@@ -1,7 +1,3 @@
-import java.nio.charset.StandardCharsets
-import java.util.Base64
-import java.util.Properties
-
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
@@ -12,34 +8,8 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-val localProperties = Properties()
-val localPropertiesFile = rootProject.file("local.properties")
-if (localPropertiesFile.exists()) {
-    localPropertiesFile.inputStream().use { localProperties.load(it) }
-}
-
-val dartDefines = if (project.hasProperty("dart-defines")) {
-    project.property("dart-defines")
-        .toString()
-        .split(",")
-        .filter { it.isNotBlank() }
-        .mapNotNull { encoded ->
-            val decoded = String(
-                Base64.getDecoder().decode(encoded),
-                StandardCharsets.UTF_8,
-            )
-            val separatorIndex = decoded.indexOf("=")
-            if (separatorIndex <= 0) {
-                null
-            } else {
-                decoded.substring(0, separatorIndex) to
-                    decoded.substring(separatorIndex + 1)
-            }
-        }
-        .toMap()
-} else {
-    emptyMap()
-}
+// Keep one shared Maps key for all dev machines to avoid local key drift.
+val fixedGoogleMapsApiKey = "AIzaSyAu1BLEFA3Snj7wK6m27Tb_-rzsGNJUVXg"
 
 android {
     namespace = "com.example.smart_room_iot_app"
@@ -64,11 +34,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        manifestPlaceholders["googleMapsApiKey"] =
-            dartDefines["GOOGLE_MAPS_API_KEY"]
-                ?: localProperties.getProperty("GOOGLE_MAPS_API_KEY")
-                ?: System.getenv("GOOGLE_MAPS_API_KEY")
-                ?: ""
+        manifestPlaceholders["googleMapsApiKey"] = fixedGoogleMapsApiKey
     }
 
     buildTypes {
