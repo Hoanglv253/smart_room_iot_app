@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/data/vietnam_admin_units.dart';
 import '../../../core/services/app_firestore_service.dart';
 import '../../../core/services/map_service.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/building_map_preview.dart';
 import '../../messages/screens/chat_detail_screen.dart';
 import '../../profile/screens/profile_screen.dart';
@@ -47,35 +48,52 @@ class _FeedScreenState extends State<FeedScreen> {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            TextField(
-              controller: _searchController,
-              decoration: const InputDecoration(
-                hintText: 'Tim toa nha, quan ly, nguoi thue...',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Feed',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _searchController,
+                      decoration: const InputDecoration(
+                        hintText: 'Tim toa nha, quan ly, nguoi thue...',
+                        prefixIcon: Icon(Icons.search),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('Toa nha'),
+                          selected: _viewModel.filter == FeedFilter.buildings,
+                          onSelected: (_) =>
+                              _viewModel.setFilter(FeedFilter.buildings),
+                        ),
+                        ChoiceChip(
+                          label: const Text('Quan ly'),
+                          selected: _viewModel.filter == FeedFilter.managers,
+                          onSelected: (_) =>
+                              _viewModel.setFilter(FeedFilter.managers),
+                        ),
+                        ChoiceChip(
+                          label: const Text('Nguoi thue'),
+                          selected: _viewModel.filter == FeedFilter.tenants,
+                          onSelected: (_) =>
+                              _viewModel.setFilter(FeedFilter.tenants),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                ChoiceChip(
-                  label: const Text('Toa nha'),
-                  selected: _viewModel.filter == FeedFilter.buildings,
-                  onSelected: (_) => _viewModel.setFilter(FeedFilter.buildings),
-                ),
-                ChoiceChip(
-                  label: const Text('Quan ly'),
-                  selected: _viewModel.filter == FeedFilter.managers,
-                  onSelected: (_) => _viewModel.setFilter(FeedFilter.managers),
-                ),
-                ChoiceChip(
-                  label: const Text('Nguoi thue'),
-                  selected: _viewModel.filter == FeedFilter.tenants,
-                  onSelected: (_) => _viewModel.setFilter(FeedFilter.tenants),
-                ),
-              ],
             ),
             if (_viewModel.filter == FeedFilter.buildings) ...[
               const SizedBox(height: 12),
@@ -1805,9 +1823,13 @@ class _FeedEmptyState extends StatelessWidget {
       child: Center(
         child: Column(
           children: [
-            Icon(icon, color: Colors.blueAccent, size: 56),
+            Icon(icon, color: AppColors.primary, size: 56),
             const SizedBox(height: 12),
-            Text(message, textAlign: TextAlign.center),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.textSecondary),
+            ),
           ],
         ),
       ),

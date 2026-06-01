@@ -1,4 +1,4 @@
-import 'package:firebase_auth/firebase_auth.dart';
+﻿import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/services/app_firestore_service.dart';
@@ -8,7 +8,7 @@ import '../../feed/screens/feed_screen.dart';
 import '../../messages/screens/messages_screen.dart';
 import '../../settings/screens/admin_settings_screen.dart';
 import '../view_models/role_home_view_model.dart';
-import '../widgets/role_header.dart';
+import '../widgets/role_home_shell.dart';
 
 class AdminHomeScreen extends StatefulWidget {
   const AdminHomeScreen({
@@ -27,11 +27,11 @@ class AdminHomeScreen extends StatefulWidget {
 class _AdminHomeScreenState extends State<AdminHomeScreen> {
   final _viewModel = RoleHomeViewModel();
 
-  static const _items = <_AdminNavItem>[
-    _AdminNavItem(icon: Icons.home_outlined, label: 'Trang chủ'),
-    _AdminNavItem(icon: Icons.apartment_outlined, label: 'Tòa nhà của tôi'),
-    _AdminNavItem(icon: Icons.chat_bubble_outline, label: 'Tin nhắn'),
-    _AdminNavItem(icon: Icons.settings_outlined, label: 'Cài đặt'),
+  static const _items = <RoleNavItem>[
+    RoleNavItem(icon: Icons.dynamic_feed_outlined, label: 'Feed'),
+    RoleNavItem(icon: Icons.apartment_outlined, label: 'Toa nha'),
+    RoleNavItem(icon: Icons.chat_bubble_outline, label: 'Tin nhan'),
+    RoleNavItem(icon: Icons.settings_outlined, label: 'Cai dat'),
   ];
 
   @override
@@ -55,44 +55,18 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     return AnimatedBuilder(
       animation: _viewModel,
       builder: (context, _) {
-        return Scaffold(
-          appBar: AppBar(
-            backgroundColor: Colors.blueAccent,
-            foregroundColor: Colors.white,
-            automaticallyImplyLeading: false,
-            toolbarHeight: 72,
-            titleSpacing: 14,
-            title: RoleHeader(
-              user: widget.user,
-              roleLabel: 'ADMIN',
-              avatarText: 'AD',
-              avatarColor: const Color(0xFFFFCCBC),
-              avatarTextColor: const Color(0xFF5D4037),
-            ),
-            actions: [
-              IconButton(
-                tooltip: 'Đăng xuất',
-                icon: const Icon(Icons.logout),
-                onPressed: () => widget.onLogout(context),
-              ),
-            ],
-          ),
-          body: pages[_viewModel.currentIndex],
-          bottomNavigationBar: BottomNavigationBar(
-            currentIndex: _viewModel.currentIndex,
-            type: BottomNavigationBarType.fixed,
-            selectedItemColor: Colors.blueAccent,
-            unselectedItemColor: Colors.grey,
-            onTap: _viewModel.selectIndex,
-            items: _items
-                .map(
-                  (item) => BottomNavigationBarItem(
-                    icon: Icon(item.icon),
-                    label: item.label,
-                  ),
-                )
-                .toList(),
-          ),
+        return RoleHomeShell(
+          user: widget.user,
+          role: UserRole.admin,
+          roleLabel: 'Admin',
+          avatarText: 'AD',
+          avatarColor: const Color(0xFFFFCCBC),
+          avatarTextColor: const Color(0xFF5D4037),
+          currentIndex: _viewModel.currentIndex,
+          pages: pages,
+          items: _items,
+          onTapNav: _viewModel.selectIndex,
+          onLogout: () => widget.onLogout(context),
         );
       },
     );
@@ -108,11 +82,4 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       ),
     );
   }
-}
-
-class _AdminNavItem {
-  const _AdminNavItem({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
 }

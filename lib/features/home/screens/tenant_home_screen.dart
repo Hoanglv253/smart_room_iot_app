@@ -1,4 +1,4 @@
-import 'package:firebase_auth/firebase_auth.dart';
+﻿import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/services/app_firestore_service.dart';
@@ -7,7 +7,7 @@ import '../../feed/screens/feed_screen.dart';
 import '../../messages/screens/messages_screen.dart';
 import '../../settings/screens/basic_settings_screen.dart';
 import '../view_models/role_home_view_model.dart';
-import '../widgets/role_header.dart';
+import '../widgets/role_home_shell.dart';
 
 class TenantHomeScreen extends StatefulWidget {
   const TenantHomeScreen({
@@ -28,11 +28,11 @@ class TenantHomeScreen extends StatefulWidget {
 class _TenantHomeScreenState extends State<TenantHomeScreen> {
   final _viewModel = RoleHomeViewModel();
 
-  static const _items = <_TenantNavItem>[
-    _TenantNavItem(icon: Icons.home_outlined, label: 'Trang chủ'),
-    _TenantNavItem(icon: Icons.meeting_room_outlined, label: 'Phòng của tôi'),
-    _TenantNavItem(icon: Icons.chat_bubble_outline, label: 'Tin nhắn'),
-    _TenantNavItem(icon: Icons.settings_outlined, label: 'Cài đặt'),
+  static const _items = <RoleNavItem>[
+    RoleNavItem(icon: Icons.dynamic_feed_outlined, label: 'Feed'),
+    RoleNavItem(icon: Icons.meeting_room_outlined, label: 'Phong cua toi'),
+    RoleNavItem(icon: Icons.chat_bubble_outline, label: 'Tin nhan'),
+    RoleNavItem(icon: Icons.settings_outlined, label: 'Cai dat'),
   ];
 
   @override
@@ -53,53 +53,20 @@ class _TenantHomeScreenState extends State<TenantHomeScreen> {
     return AnimatedBuilder(
       animation: _viewModel,
       builder: (context, _) {
-        return Scaffold(
-          appBar: AppBar(
-            backgroundColor: Colors.blueAccent,
-            foregroundColor: Colors.white,
-            automaticallyImplyLeading: false,
-            toolbarHeight: 72,
-            titleSpacing: 14,
-            title: RoleHeader(
-              user: widget.user,
-              roleLabel: 'NGƯỜI DÙNG',
-              avatarText: 'ND',
-              avatarColor: const Color(0xFFBBDEFB),
-              avatarTextColor: const Color(0xFF0D47A1),
-            ),
-            actions: [
-              IconButton(
-                tooltip: 'Đăng xuất',
-                icon: const Icon(Icons.logout),
-                onPressed: () => widget.onLogout(context),
-              ),
-            ],
-          ),
-          body: pages[_viewModel.currentIndex],
-          bottomNavigationBar: BottomNavigationBar(
-            currentIndex: _viewModel.currentIndex,
-            type: BottomNavigationBarType.fixed,
-            selectedItemColor: Colors.blueAccent,
-            unselectedItemColor: Colors.grey,
-            onTap: _viewModel.selectIndex,
-            items: _items
-                .map(
-                  (item) => BottomNavigationBarItem(
-                    icon: Icon(item.icon),
-                    label: item.label,
-                  ),
-                )
-                .toList(),
-          ),
+        return RoleHomeShell(
+          user: widget.user,
+          role: UserRole.user,
+          roleLabel: 'Tenant',
+          avatarText: 'TN',
+          avatarColor: const Color(0xFFBBDEFB),
+          avatarTextColor: const Color(0xFF0D47A1),
+          currentIndex: _viewModel.currentIndex,
+          pages: pages,
+          items: _items,
+          onTapNav: _viewModel.selectIndex,
+          onLogout: () => widget.onLogout(context),
         );
       },
     );
   }
-}
-
-class _TenantNavItem {
-  const _TenantNavItem({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
 }

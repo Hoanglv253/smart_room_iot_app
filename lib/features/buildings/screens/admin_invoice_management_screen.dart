@@ -1103,7 +1103,7 @@ class _AdminInvoiceDetailScreenState extends State<_AdminInvoiceDetailScreen> {
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(_adminPaymentError('confirm'))),
+      SnackBar(content: Text(_adminPaymentError())),
     );
   }
 
@@ -1212,17 +1212,13 @@ class _AdminInvoiceDetailScreenState extends State<_AdminInvoiceDetailScreen> {
     );
   }
 
-  String _adminPaymentError(String action) {
+  String _adminPaymentError() {
     final error = _viewModel.errorMessage;
     if (error?.contains('permission-denied') == true) {
-      return action == 'confirm'
-          ? 'Firestore chua cap quyen xac nhan thanh toan.'
-          : 'Firestore chua cap quyen tu choi thanh toan.';
+      return 'Firestore chua cap quyen xac nhan thanh toan.';
     }
 
-    return action == 'confirm'
-        ? 'Khong xac nhan duoc thanh toan.'
-        : 'Khong tu choi duoc thanh toan.';
+    return 'Khong xac nhan duoc thanh toan.';
   }
 }
 

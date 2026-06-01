@@ -1,8 +1,9 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/services/app_firestore_service.dart';
+import '../../../core/theme/app_theme.dart';
 import '../view_models/messages_view_model.dart';
 import 'chat_detail_screen.dart';
 
@@ -66,9 +67,9 @@ class _MessagesScreenState extends State<MessagesScreen> {
             }
 
             return ListView.separated(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
               itemCount: chats.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 8),
+              separatorBuilder: (_, _) => const SizedBox(height: 10),
               itemBuilder: (context, index) {
                 final doc = chats[index];
                 final data = doc.data();
@@ -76,41 +77,82 @@ class _MessagesScreenState extends State<MessagesScreen> {
                 final title = (data['title'] ?? 'Tin nhan').toString();
                 final lastMessage = (data['lastMessage'] ?? '').toString();
 
-                return Card(
-                  elevation: 1,
-                  child: ListTile(
-                    leading: Icon(
-                      isGroup ? Icons.groups_outlined : Icons.person_outline,
-                      color: Colors.blueAccent,
-                    ),
-                    title: Text(title),
-                    subtitle: Text(
-                      lastMessage.isEmpty
-                          ? (isGroup ? 'Nhom chat toa nha' : 'Chat rieng')
-                          : lastMessage,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    trailing: isGroup
-                        ? const Icon(
-                            Icons.push_pin_outlined,
-                            color: Colors.blueAccent,
-                          )
-                        : null,
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => ChatDetailScreen(
-                            chatId: doc.id,
-                            chatTitle: title,
-                            user: widget.user,
-                          ),
+                return InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => ChatDetailScreen(
+                          chatId: doc.id,
+                          chatTitle: title,
+                          user: widget.user,
                         ),
-                      );
-                    },
-                    onLongPress: isGroup
-                        ? null
-                        : () => _confirmDeleteChat(context, doc.id),
+                      ),
+                    );
+                  },
+                  onLongPress: isGroup
+                      ? null
+                      : () => _confirmDeleteChat(context, doc.id),
+                  child: Ink(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 24,
+                            backgroundColor: isGroup
+                                ? const Color(0xFFE8F3FF)
+                                : const Color(0xFFF2F5FB),
+                            child: Icon(
+                              isGroup
+                                  ? Icons.apartment_rounded
+                                  : Icons.person_outline_rounded,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  lastMessage.isEmpty
+                                      ? (isGroup
+                                          ? 'Nhom chat toa nha'
+                                          : 'Chat rieng')
+                                      : lastMessage,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: AppColors.textSecondary,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (isGroup)
+                            const Icon(
+                              Icons.push_pin_outlined,
+                              color: AppColors.primary,
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
                 );
               },
@@ -153,9 +195,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
     final message = deleted
         ? 'Da xoa khung chat.'
         : _deleteErrorMessage(_viewModel.errorMessage);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   String _deleteErrorMessage(String? errorMessage) {

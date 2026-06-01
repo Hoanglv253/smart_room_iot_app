@@ -1,7 +1,8 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../view_models/chat_detail_view_model.dart';
 
 class ChatDetailScreen extends StatefulWidget {
@@ -47,16 +48,17 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
 
     final message = _sendErrorMessage(_viewModel.errorMessage);
     if (message != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.chatTitle)),
+      appBar: AppBar(
+        title: Text(widget.chatTitle),
+        flexibleSpace: Container(decoration: BoxDecoration(gradient: AppTheme.primaryGradient())),
+      ),
       body: Column(
         children: [
           Expanded(
@@ -81,14 +83,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
 
                 final messages = snapshot.data?.docs ?? [];
                 if (messages.isEmpty) {
-                  return const Center(
-                    child: Text('Chua co tin nhan nao.'),
-                  );
+                  return const Center(child: Text('Chua co tin nhan nao.'));
                 }
 
                 return ListView.builder(
                   reverse: true,
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
                     final data = messages[index].data();
@@ -104,6 +104,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Expanded(
                     child: TextField(
@@ -128,11 +129,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                             ? const SizedBox(
                                 width: 18,
                                 height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
+                                child: CircularProgressIndicator(strokeWidth: 2),
                               )
-                            : const Icon(Icons.send),
+                            : const Icon(Icons.send_rounded),
                       );
                     },
                   ),
@@ -170,19 +169,17 @@ class _MessageBubble extends StatelessWidget {
     return Align(
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.76,
-        ),
+        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.76),
         child: Container(
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: isMine ? Colors.blueAccent : const Color(0xFFEFEFEF),
-            borderRadius: BorderRadius.circular(12),
+            color: isMine ? AppColors.primary : Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: isMine ? null : Border.all(color: AppColors.border),
           ),
           child: Column(
-            crossAxisAlignment:
-                isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            crossAxisAlignment: isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
             children: [
               if (!isMine)
                 Padding(
@@ -192,13 +189,13 @@ class _MessageBubble extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black54,
+                      color: AppColors.textSecondary,
                     ),
                   ),
                 ),
               Text(
                 text,
-                style: TextStyle(color: isMine ? Colors.white : Colors.black87),
+                style: TextStyle(color: isMine ? Colors.white : AppColors.textPrimary),
               ),
             ],
           ),

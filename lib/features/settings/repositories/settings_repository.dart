@@ -6,7 +6,6 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/services/app_firestore_service.dart';
-import '../../../core/services/map_service.dart';
 
 class SettingsRepository {
   static const _cloudinaryCloudName = String.fromEnvironment(
@@ -15,7 +14,6 @@ class SettingsRepository {
   static const _cloudinaryUploadPreset = String.fromEnvironment(
     'CLOUDINARY_UPLOAD_PRESET',
   );
-  final _mapService = MapService();
 
   Future<QuerySnapshot<Map<String, dynamic>>> adminBuilding(String adminId) {
     return AppFirestoreService.buildings
@@ -141,14 +139,11 @@ class SettingsRepository {
   Future<Map<String, dynamic>> resolveBuildingLocation(String address) async {
     final trimmedAddress = address.trim();
     if (trimmedAddress.isEmpty) return {};
-
-    try {
-      final location = await _mapService.geocodeAddress(trimmedAddress);
-      return location?.toMap() ??
-          MapService.addressOnlyLocation(trimmedAddress);
-    } catch (_) {
-      return MapService.addressOnlyLocation(trimmedAddress);
-    }
+    return {
+      'address': trimmedAddress,
+      'query': trimmedAddress,
+      'source': 'address_only',
+    };
   }
 
   Future<void> syncRooms({

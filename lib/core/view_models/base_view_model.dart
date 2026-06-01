@@ -21,7 +21,7 @@ abstract class BaseViewModel extends ChangeNotifier {
     try {
       return await task();
     } catch (error) {
-      _errorMessage = error.toString();
+      _errorMessage = _normalizeError(error);
       return null;
     } finally {
       _setLoading(false);
@@ -36,7 +36,7 @@ abstract class BaseViewModel extends ChangeNotifier {
       await action();
       return true;
     } catch (error) {
-      _errorMessage = error.toString();
+      _errorMessage = _normalizeError(error);
       return false;
     } finally {
       _setLoading(false);
@@ -52,5 +52,16 @@ abstract class BaseViewModel extends ChangeNotifier {
     if (_isLoading == value) return;
     _isLoading = value;
     notifyListeners();
+  }
+
+  String _normalizeError(Object error) {
+    final text = error.toString().trim();
+    const exceptionPrefix = 'Exception:';
+
+    if (text.startsWith(exceptionPrefix)) {
+      return text.substring(exceptionPrefix.length).trim();
+    }
+
+    return text;
   }
 }

@@ -98,20 +98,6 @@ class InvoiceRepository {
     });
   }
 
-  Future<void> rejectPayment({
-    required String buildingId,
-    required String invoiceId,
-  }) {
-    return AppFirestoreService.buildingInvoices(buildingId).doc(invoiceId).update({
-      'status': InvoiceStatus.unpaid,
-      'paymentMethod': FieldValue.delete(),
-      'paymentNote': FieldValue.delete(),
-      'paidReportedAt': FieldValue.delete(),
-      'paymentRejectedAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-  }
-
   Future<void> reportManualPayment({
     required String buildingId,
     required String invoiceId,
