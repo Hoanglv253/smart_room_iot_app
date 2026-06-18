@@ -35,34 +35,35 @@ class AdminAdSettingsViewModel extends BaseViewModel {
     });
   }
 
-  Future<bool?> pickAndUploadRoomImage({
+  Future<int?> pickAndUploadRoomImages({
     required String buildingId,
     required String roomId,
   }) async {
     clearError();
 
-    late final XFile? image;
+    late final List<XFile> images;
     try {
-      image = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
+      images = await _imagePicker.pickMultiImage(
         imageQuality: 82,
         maxWidth: 1800,
       );
     } catch (error) {
       setError(error.toString());
-      return false;
+      return 0;
     }
 
-    final selectedImage = image;
-    if (selectedImage == null) return null;
+    final selectedImages = images;
+    if (selectedImages.isEmpty) return null;
 
-    return runBusyAction(() async {
-      await _settingsRepository.uploadRoomImage(
+    final uploadedUrls = <String>[];
+    final uploaded = await runBusyAction(() async {
+      uploadedUrls.addAll(await _settingsRepository.uploadRoomImages(
         buildingId: buildingId,
         roomId: roomId,
-        image: selectedImage,
-      );
+        images: selectedImages,
+      ));
     });
+    return uploaded ? uploadedUrls.length : 0;
   }
 
   Future<bool> setCoverImage({

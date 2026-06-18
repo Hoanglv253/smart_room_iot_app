@@ -2,6 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
 import 'app_keys.dart';
+import 'core/theme/app_theme.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'firebase_options.dart';
 
@@ -17,12 +18,9 @@ class SmartRoomApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Smart Room IoT',
+      title: 'Apart-Hub',
       scaffoldMessengerKey: rootScaffoldMessengerKey,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueAccent),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.light(),
       home: const LoginScreen(),
       debugShowCheckedModeBanner: false,
     );

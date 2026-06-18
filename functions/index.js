@@ -91,7 +91,6 @@ function requireEnv(name) {
 initializeFirebase();
 
 const db = admin.firestore();
-let payosInstance = null;
 
 function hasGlobalPayosConfig() {
   return Boolean(
@@ -108,14 +107,6 @@ function globalPayosConfig() {
     apiKey: requireEnv('PAYOS_API_KEY'),
     checksumKey: requireEnv('PAYOS_CHECKSUM_KEY'),
   };
-}
-
-function payosClient() {
-  if (payosInstance) return payosInstance;
-
-  const config = globalPayosConfig();
-  payosInstance = payosClientFromConfig(config);
-  return payosInstance;
 }
 
 function payosClientFromConfig(config) {

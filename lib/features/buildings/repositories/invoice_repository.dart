@@ -73,7 +73,7 @@ class InvoiceRepository {
           (snapshot.data()?['status'] ?? InvoiceStatus.unpaid).toString();
 
       if (status != InvoiceStatus.unpaid) {
-        throw StateError('Chi duoc sua hoa don chua thanh toan.');
+        throw StateError('Chỉ được sửa hóa đơn chưa thanh toán.');
       }
 
       transaction.update(invoiceRef, {
@@ -94,20 +94,6 @@ class InvoiceRepository {
       'status': InvoiceStatus.paid,
       'paymentMethod': 'admin_confirmed',
       'paidAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-  }
-
-  Future<void> rejectPayment({
-    required String buildingId,
-    required String invoiceId,
-  }) {
-    return AppFirestoreService.buildingInvoices(buildingId).doc(invoiceId).update({
-      'status': InvoiceStatus.unpaid,
-      'paymentMethod': FieldValue.delete(),
-      'paymentNote': FieldValue.delete(),
-      'paidReportedAt': FieldValue.delete(),
-      'paymentRejectedAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
@@ -148,8 +134,8 @@ class InvoiceRepository {
           const Duration(seconds: 15),
           onTimeout: () {
             throw TimeoutException(
-              'Khong ket noi duoc PayOS backend tai $backendBaseUrl. '
-              'Hay rebuild app, kiem tra server 8080 va adb reverse.',
+              'Không kết nối được PayOS backend tải $backendBaseUrl. '
+              'Hãy rebuild app, kiểm tra server 8080 và adb reverse.',
             );
           },
         );
@@ -158,14 +144,14 @@ class InvoiceRepository {
     final data = decoded is Map<String, dynamic> ? decoded : {};
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(
-        data['message']?.toString() ?? 'Khong tao duoc thanh toan PayOS.',
+        data['message']?.toString() ?? 'Không tạo được thanh toán PayOS.',
       );
     }
 
     final checkoutUrl = data['checkoutUrl']?.toString() ?? '';
     final uri = Uri.tryParse(checkoutUrl);
     if (uri == null || checkoutUrl.isEmpty) {
-      throw Exception('PayOS chua tra ve link thanh toan.');
+      throw Exception('PayOS chưa tra ve link thanh toán.');
     }
 
     return uri;

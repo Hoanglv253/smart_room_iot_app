@@ -1,0 +1,42 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function buildingPath(buildingId) {
+      return /databases/(default)/documents/buildings/$(buildingId);
+    }
+
+    function isBuildingAdmin(buildingId) {
+      return signedIn()
+        && firestore.exists(buildingPath(buildingId))
+        && firestore.get(buildingPath(buildingId)).data.adminId == request.auth.uid;
+    }
+
+    function isImageUpload() {
+      return request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    match /buildings/{buildingId}/rooms/{roomId}/{fileName} {
+      allow read: if signedIn();
+      allow create, update: if isBuildingAdmin(buildingId) && isImageUpload();
+      allow delete: if isBuildingAdmin(buildingId);
+    }
+
+    match /users/{userId}/avatar/{fileName} {
+      allow read: if signedIn();
+      allow create, update: if signedIn()
+        && request.auth.uid == userId
+        && isImageUpload();
+      allow delete: if signedIn() && request.auth.uid == userId;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

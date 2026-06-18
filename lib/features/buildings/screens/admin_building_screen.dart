@@ -3,8 +3,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/services/app_firestore_service.dart';
-import '../../../core/widgets/building_map_preview.dart';
+import '../../notifications/screens/notifications_screen.dart';
+import '../../settings/screens/admin_ad_settings_screen.dart';
 import '../view_models/admin_building_view_model.dart';
+import '../widgets/building_dashboard_widgets.dart';
 import 'admin_invoice_management_screen.dart';
 import 'admin_room_management_screen.dart';
 
@@ -52,38 +54,12 @@ class _AdminBuildingScreenState extends State<AdminBuildingScreen> {
         final buildingId = buildingDoc.id;
         final building = buildingDoc.data();
 
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Text(
-              (building['name'] ?? 'Tòa nhà của tôi').toString(),
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            const SizedBox(height: 4),
-            Text((building['address'] ?? 'Chưa có địa chỉ').toString()),
-            const SizedBox(height: 16),
-            BuildingMapPreview(building: building),
-            const SizedBox(height: 16),
-            _BuildingStats(
-              buildingId: buildingId,
-              building: building,
-              viewModel: _viewModel,
-            ),
-            const SizedBox(height: 16),
-            _AdminActionGrid(
-              buildingId: buildingId,
-              building: building,
-              onOpenUserManagement: widget.onOpenUserManagement,
-            ),
-            const SizedBox(height: 16),
-            _JoinRequestBoard(
-              buildingId: buildingId,
-              adminId: widget.user.uid,
-              viewModel: _viewModel,
-            ),
-          ],
+        return _AdminBuildingDashboard(
+          user: widget.user,
+          buildingId: buildingId,
+          building: building,
+          viewModel: _viewModel,
+          onOpenUserManagement: widget.onOpenUserManagement,
         );
       },
     );
@@ -107,254 +83,164 @@ class _NoBuildingView extends StatelessWidget {
   }
 }
 
-class _BuildingStats extends StatelessWidget {
-  const _BuildingStats({
+class _AdminBuildingDashboard extends StatelessWidget {
+  const _AdminBuildingDashboard({
+    required this.user,
     required this.buildingId,
     required this.building,
     required this.viewModel,
+    required this.onOpenUserManagement,
   });
 
+  final User user;
   final String buildingId;
   final Map<String, dynamic> building;
   final AdminBuildingViewModel viewModel;
+  final void Function(String buildingId, String buildingName)
+      onOpenUserManagement;
 
   @override
   Widget build(BuildContext context) {
-    final totalRooms = (building['totalRooms'] as num?)?.toInt() ?? 0;
-
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: viewModel.members(buildingId),
-      builder: (context, snapshot) {
-        final tenantCount = viewModel.tenantCount(snapshot.data?.docs ?? []);
-        final occupiedRooms = tenantCount.clamp(0, totalRooms).toInt();
-        final emptyRooms = (totalRooms - occupiedRooms)
-            .clamp(0, totalRooms)
-            .toInt();
+      stream: viewModel.rooms(buildingId),
+      builder: (context, roomSnapshot) {
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: viewModel.members(buildingId),
+          builder: (context, memberSnapshot) {
+            return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: viewModel.invoices(buildingId),
+              builder: (context, invoiceSnapshot) {
+                return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream: viewModel.pendingJoinRequests(buildingId),
+                  builder: (context, requestSnapshot) {
+                    final members = memberSnapshot.data?.docs ?? [];
+                    final requests = requestSnapshot.data?.docs ?? [];
+                    final pendingRequestCount = requests.length;
 
-        return Row(
-          children: [
-            Expanded(
-              child: _StatCard(
-                title: 'Tổng người thuê',
-                value: '$tenantCount',
-                icon: Icons.groups_outlined,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _RoomPieCard(
-                totalRooms: totalRooms,
-                occupiedRooms: occupiedRooms,
-                emptyRooms: emptyRooms,
-              ),
-            ),
-          ],
+                    return BuildingDashboardContent(
+                      building: building,
+                      rooms: roomSnapshot.data?.docs ?? [],
+                      tenantCount: viewModel.tenantCount(members),
+                      pendingRequestCount: pendingRequestCount,
+                      pendingInvoiceCount:
+                          _pendingInvoiceCount(invoiceSnapshot.data?.docs ?? []),
+                      actions: _actions(context),
+                      footer: pendingRequestCount == 0
+                          ? null
+                          : _JoinRequestBoard(
+                              buildingId: buildingId,
+                              adminId: user.uid,
+                              viewModel: viewModel,
+                            ),
+                    );
+                  },
+                );
+              },
+            );
+          },
         );
       },
     );
   }
-}
 
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.title,
-    required this.value,
-    required this.icon,
-  });
+  List<BuildingDashboardAction> _actions(BuildContext context) {
+    return [
+      BuildingDashboardAction(
+        icon: Icons.meeting_room_outlined,
+        label: 'Phòng',
+        subtitle: 'Số do và trạng thái',
+        onTap: () => _openRooms(context),
+      ),
+      BuildingDashboardAction(
+        icon: Icons.people_outline,
+        label: 'Người thuê',
+        subtitle: 'Thành viên tòa nhà',
+        color: const Color(0xFF16A34A),
+        onTap: () {
+          onOpenUserManagement(
+            buildingId,
+            (building['name'] ?? 'tòa nhà').toString(),
+          );
+        },
+      ),
+      BuildingDashboardAction(
+        icon: Icons.receipt_long_outlined,
+        label: 'Hóa đơn',
+        subtitle: 'Thu tiền hàng tháng',
+        color: const Color(0xFFF59E0B),
+        onTap: () => _openInvoices(context),
+      ),
+      BuildingDashboardAction(
+        icon: Icons.notifications_active_outlined,
+        label: 'Thông báo',
+        subtitle: 'Gửi tin cho tòa nhà',
+        color: const Color(0xFF7C3AED),
+        onTap: () => _openNotifications(context),
+      ),
+      BuildingDashboardAction(
+        icon: Icons.campaign_outlined,
+        label: 'Quảng cáo',
+        subtitle: 'Đang lên Trang chủ',
+        color: const Color(0xFF0EA5E9),
+        onTap: () => _openAds(context),
+      ),
+    ];
+  }
 
-  final String title;
-  final String value;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 1,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Icon(icon, color: Colors.blueAccent, size: 32),
-            const SizedBox(height: 12),
-            Text(
-              value,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            const SizedBox(height: 4),
-            Text(title, textAlign: TextAlign.center),
-          ],
+  void _openRooms(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AdminRoomManagementScreen(
+          buildingId: buildingId,
+          building: building,
         ),
       ),
     );
   }
-}
 
-class _RoomPieCard extends StatelessWidget {
-  const _RoomPieCard({
-    required this.totalRooms,
-    required this.occupiedRooms,
-    required this.emptyRooms,
-  });
-
-  final int totalRooms;
-  final int occupiedRooms;
-  final int emptyRooms;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 1,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            SizedBox(
-              width: 68,
-              height: 68,
-              child: CustomPaint(
-                painter: _RoomPiePainter(
-                  occupied: occupiedRooms,
-                  empty: emptyRooms,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              '$totalRooms phòng',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            Text('Trống: $emptyRooms | Đã thuê: $occupiedRooms'),
-          ],
+  void _openInvoices(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AdminInvoiceManagementScreen(
+          buildingId: buildingId,
+          building: building,
         ),
       ),
     );
   }
-}
 
-class _RoomPiePainter extends CustomPainter {
-  const _RoomPiePainter({required this.occupied, required this.empty});
-
-  final int occupied;
-  final int empty;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final total = occupied + empty;
-    final rect = Offset.zero & size;
-    final occupiedPaint = Paint()..color = Colors.blueAccent;
-    final emptyPaint = Paint()..color = const Color(0xFFBDBDBD);
-
-    if (total == 0) {
-      canvas.drawArc(rect, 0, 6.283, true, emptyPaint);
-      return;
-    }
-
-    final occupiedSweep = (occupied / total) * 6.283;
-    canvas.drawArc(rect, -1.5708, occupiedSweep, true, occupiedPaint);
-    canvas.drawArc(
-      rect,
-      -1.5708 + occupiedSweep,
-      6.283 - occupiedSweep,
-      true,
-      emptyPaint,
+  void _openNotifications(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => NotificationsScreen(
+          user: user,
+          role: UserRole.admin,
+          buildingId: buildingId,
+          buildingName: (building['name'] ?? 'Tòa nhà').toString(),
+        ),
+      ),
     );
   }
 
-  @override
-  bool shouldRepaint(covariant _RoomPiePainter oldDelegate) {
-    return oldDelegate.occupied != occupied || oldDelegate.empty != empty;
-  }
-}
-
-class _AdminActionGrid extends StatelessWidget {
-  const _AdminActionGrid({
-    required this.buildingId,
-    required this.building,
-    required this.onOpenUserManagement,
-  });
-
-  final String buildingId;
-  final Map<String, dynamic> building;
-  final void Function(String buildingId, String buildingName)
-      onOpenUserManagement;
-
-  static const _actions = [
-    _AdminAction('building', Icons.apartment_outlined, 'Quản lý tòa nhà'),
-    _AdminAction('users', Icons.people_outline, 'Quản lý người dùng'),
-    _AdminAction('bills', Icons.receipt_long_outlined, 'Hóa đơn'),
-    _AdminAction('emergency', Icons.emergency_outlined, 'Khẩn cấp'),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      childAspectRatio: 1.5,
-      children: _actions.map((action) {
-        return Card(
-          elevation: 1,
-          child: InkWell(
-            onTap: () => _handleActionTap(context, action.id),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(action.icon, color: Colors.blueAccent),
-                const SizedBox(height: 8),
-                Text(action.label, textAlign: TextAlign.center),
-              ],
-            ),
-          ),
-        );
-      }).toList(),
+  void _openAds(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AdminAdSettingsScreen(
+          user: user,
+          buildingId: buildingId,
+        ),
+      ),
     );
   }
 
-  void _handleActionTap(BuildContext context, String actionId) {
-    if (actionId == 'building') {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => AdminRoomManagementScreen(
-            buildingId: buildingId,
-            building: building,
-          ),
-        ),
-      );
-      return;
-    }
-
-    if (actionId == 'users') {
-      onOpenUserManagement(
-        buildingId,
-        (building['name'] ?? 'toa nha').toString(),
-      );
-      return;
-    }
-
-    if (actionId == 'bills') {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => AdminInvoiceManagementScreen(
-            buildingId: buildingId,
-            building: building,
-          ),
-        ),
-      );
-    }
+  static int _pendingInvoiceCount(
+    Iterable<QueryDocumentSnapshot<Map<String, dynamic>>> invoices,
+  ) {
+    return invoices.where((doc) {
+      final status = (doc.data()['status'] ?? InvoiceStatus.unpaid).toString();
+      return status == InvoiceStatus.pending;
+    }).length;
   }
-}
-
-class _AdminAction {
-  const _AdminAction(this.id, this.icon, this.label);
-
-  final String id;
-  final IconData icon;
-  final String label;
 }
 
 class _JoinRequestBoard extends StatelessWidget {
@@ -371,17 +257,27 @@ class _JoinRequestBoard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      elevation: 1,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: Color(0xFFE2E8F0)),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Bảng thông báo',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+            Row(
+              children: [
+                const Icon(Icons.notifications_active_outlined),
+                const SizedBox(width: 8),
+                Text(
+                  'Yêu cầu tham gia',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
@@ -397,7 +293,10 @@ class _JoinRequestBoard extends StatelessWidget {
                     final data = doc.data();
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.notifications_outlined),
+                      leading: const CircleAvatar(
+                        backgroundColor: Color(0xFFEFF6FF),
+                        child: Icon(Icons.person_add_alt_1_outlined),
+                      ),
                       title: Text(
                         (data['requesterName'] ?? 'Người dùng').toString(),
                       ),
@@ -407,12 +306,12 @@ class _JoinRequestBoard extends StatelessWidget {
                       trailing: Wrap(
                         children: [
                           IconButton(
-                            tooltip: 'Duyệt',
+                            tooltip: 'Duyet',
                             icon: const Icon(Icons.check, color: Colors.green),
                             onPressed: () => _approve(context, doc.id, data),
                           ),
                           IconButton(
-                            tooltip: 'Từ chối',
+                            tooltip: 'Từ choi',
                             icon: const Icon(Icons.close, color: Colors.red),
                             onPressed: () => _reject(context, doc.id),
                           ),
@@ -460,29 +359,29 @@ class _JoinRequestBoard extends StatelessWidget {
 
   String _approvalMessage(JoinRequestApprovalResult result) {
     if (result == JoinRequestApprovalResult.approved) {
-      return 'Da duyet yeu cau tham gia.';
+      return 'Đã duyệt yêu cầu tham gia.';
     }
 
     if (result == JoinRequestApprovalResult.approvedWithoutGroupChat) {
       if (viewModel.errorMessage?.contains('permission-denied') == true) {
-        return 'Da duyet, nhung Firestore chua cap quyen them vao nhom chat.';
+        return 'Đã duyệt, nhưng Firestore chưa cấp quyền thêm vào nhóm chat.';
       }
 
-      return 'Da duyet, nhung chua them duoc vao nhom chat.';
+      return 'Đã duyệt, nhưng chưa thêm được vào nhóm chat.';
     }
 
     if (viewModel.errorMessage?.contains('permission-denied') == true) {
-      return 'Firestore chua cap quyen duyet yeu cau tham gia.';
+      return 'Firestore chưa cấp quyền duyệt yêu cầu tham gia.';
     }
 
-    return 'Khong duyet duoc yeu cau.';
+    return 'Không duyệt được yêu cầu.';
   }
 
   String _rejectErrorMessage() {
     if (viewModel.errorMessage?.contains('permission-denied') == true) {
-      return 'Firestore chua cap quyen tu choi yeu cau tham gia.';
+      return 'Firestore chưa cấp quyền từ chối yêu cầu tham gia.';
     }
 
-    return 'Khong tu choi duoc yeu cau.';
+    return 'Không từ choi được yêu cầu.';
   }
 }

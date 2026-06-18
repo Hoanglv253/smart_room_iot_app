@@ -38,7 +38,7 @@ class TenantInvoiceDetailViewModel extends BaseViewModel {
     required String invoiceId,
   }) async {
     if (backendBaseUrl.isEmpty) {
-      setError('Chua cau hinh PAYOS_BACKEND_URL cho app.');
+      setError('Chưa cấu hình PAYOS_BACKEND_URL cho app.');
       return null;
     }
 
@@ -48,7 +48,7 @@ class TenantInvoiceDetailViewModel extends BaseViewModel {
     try {
       final idToken = await user?.getIdToken();
       if (idToken == null) {
-        setError('Hay dang nhap lai de thanh toan PayOS.');
+        setError('Hãy đăng nhập lại để thanh toán PayOS.');
         return null;
       }
 

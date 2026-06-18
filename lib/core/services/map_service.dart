@@ -81,7 +81,7 @@ class _ProvinceSearchHint {
     if (!hasCenter) return null;
     return MapLocationResult(
       address: originalAddress,
-      formattedAddress: '$name, Viet Nam',
+      formattedAddress: '$name, Việt Nam',
       latitude: centerLat!,
       longitude: centerLng!,
       placeId: '',
@@ -91,15 +91,24 @@ class _ProvinceSearchHint {
 
 class MapService {
   static const _configChannel = MethodChannel('smart_room_iot_app/config');
-  static const _googleMapsApiKey = String.fromEnvironment(
+  static const _googleMapsAndroidApiKey = String.fromEnvironment(
+    'GOOGLE_MAPS_ANDROID_API_KEY',
+    defaultValue: '',
+  );
+  static const _legacyGoogleMapsApiKey = String.fromEnvironment(
     'GOOGLE_MAPS_API_KEY',
     defaultValue: '',
   );
+  static const _googleGeocodingApiKey = String.fromEnvironment(
+    'GOOGLE_GEOCODING_API_KEY',
+    defaultValue: '',
+  );
   static String? _cachedNativeGoogleMapsApiKey;
+  static String? _cachedNativeGoogleGeocodingApiKey;
 
   static const _provinceSearchHints = <_ProvinceSearchHint>[
     _ProvinceSearchHint(
-      name: 'Da Nang',
+      name: 'Đà Nẵng',
       centerLat: 16.0471,
       centerLng: 108.2068,
       minLat: 15.75,
@@ -139,8 +148,13 @@ class MapService {
     return (await googleMapsApiKey()).isNotEmpty;
   }
 
+  static Future<bool> hasGoogleGeocodingApiKey() async {
+    return (await googleGeocodingApiKey()).isNotEmpty;
+  }
+
   static Future<String> googleMapsApiKey() async {
-    if (_googleMapsApiKey.isNotEmpty) return _googleMapsApiKey;
+    if (_googleMapsAndroidApiKey.isNotEmpty) return _googleMapsAndroidApiKey;
+    if (_legacyGoogleMapsApiKey.isNotEmpty) return _legacyGoogleMapsApiKey;
     if (_cachedNativeGoogleMapsApiKey != null) {
       return _cachedNativeGoogleMapsApiKey!;
     }
@@ -157,9 +171,34 @@ class MapService {
     return _cachedNativeGoogleMapsApiKey!;
   }
 
+  static Future<String> googleGeocodingApiKey() async {
+    if (_googleGeocodingApiKey.isNotEmpty) return _googleGeocodingApiKey;
+    if (_cachedNativeGoogleGeocodingApiKey != null) {
+      return _cachedNativeGoogleGeocodingApiKey!;
+    }
+
+    try {
+      final key = await _configChannel.invokeMethod<String>(
+        'googleGeocodingApiKey',
+      );
+      _cachedNativeGoogleGeocodingApiKey = key?.trim() ?? '';
+    } on PlatformException {
+      _cachedNativeGoogleGeocodingApiKey = '';
+    } on MissingPluginException {
+      _cachedNativeGoogleGeocodingApiKey = '';
+    }
+
+    if (_cachedNativeGoogleGeocodingApiKey!.isNotEmpty) {
+      return _cachedNativeGoogleGeocodingApiKey!;
+    }
+
+    _cachedNativeGoogleGeocodingApiKey = await googleMapsApiKey();
+    return _cachedNativeGoogleGeocodingApiKey!;
+  }
+
   Future<MapLocationResult?> geocodeAddress(String address) async {
     final trimmedAddress = address.trim();
-    final apiKey = await googleMapsApiKey();
+    final apiKey = await googleGeocodingApiKey();
     if (trimmedAddress.isEmpty || apiKey.isEmpty) return null;
 
     final provinceHint = _provinceHintForAddress(trimmedAddress);
@@ -174,7 +213,7 @@ class MapService {
           .timeout(
             const Duration(seconds: 10),
             onTimeout: () {
-              throw TimeoutException('Google Maps geocoding qua lau.');
+              throw TimeoutException('Google Maps geocoding quá lâu.');
             },
           );
 
@@ -311,15 +350,15 @@ class MapService {
   static List<String> _addressQueries(String address) {
     final normalized = _normalize(address);
     final provinceHint = _provinceHintForAddress(address);
-    final queries = <String>[address, '$address, Viet Nam'];
+    final queries = <String>[address, '$address, Việt Nam'];
 
     if (provinceHint != null) {
-      queries.insert(0, '${provinceHint.name}, Viet Nam');
-      queries.insert(0, '$address, ${provinceHint.name}, Viet Nam');
+      queries.insert(0, '${provinceHint.name}, Việt Nam');
+      queries.insert(0, '$address, ${provinceHint.name}, Việt Nam');
     }
 
     if (normalized.contains('ngu hanh son')) {
-      queries.insert(0, 'Ngu Hanh Son, Da Nang, Viet Nam');
+      queries.insert(0, 'Ngũ Hành Sơn, Đà Nẵng, Việt Nam');
     }
 
     return queries.toSet().toList();

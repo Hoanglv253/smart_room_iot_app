@@ -15,6 +15,7 @@ class MainActivity : FlutterActivity() {
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "googleMapsApiKey" -> result.success(googleMapsApiKey())
+                "googleGeocodingApiKey" -> result.success(googleGeocodingApiKey())
                 else -> result.notImplemented()
             }
         }
@@ -29,5 +30,19 @@ class MainActivity : FlutterActivity() {
         return appInfo.metaData
             ?.getString("com.google.android.geo.API_KEY")
             .orEmpty()
+    }
+
+    private fun googleGeocodingApiKey(): String {
+        val appInfo = packageManager.getApplicationInfo(
+            packageName,
+            PackageManager.GET_META_DATA,
+        )
+
+        val geocodingKey = appInfo.metaData
+            ?.getString("com.google.android.geo.GEOCODING_API_KEY")
+            .orEmpty()
+
+        if (geocodingKey.isNotBlank()) return geocodingKey
+        return googleMapsApiKey()
     }
 }

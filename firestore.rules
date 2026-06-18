@@ -36,6 +36,27 @@ service cloud.firestore {
         && get(buildingPath(buildingId)).data.adminId == request.auth.uid;
     }
 
+    function isBuildingMember(buildingId) {
+      return hasUserProfile() && currentUser().buildingId == buildingId;
+    }
+
+    function isBuildingManager(buildingId) {
+      return isBuildingMember(buildingId) && currentUser().role == 'manager';
+    }
+
+    function canManageBuildingNotifications(buildingId) {
+      return isBuildingAdmin(buildingId) || isBuildingManager(buildingId);
+    }
+
+    function canReadBuildingNotification(notification) {
+      return signedIn()
+        && (
+          isBuildingAdmin(notification.buildingId)
+          || isBuildingManager(notification.buildingId)
+          || isBuildingMember(notification.buildingId)
+        );
+    }
+
     function isChatMember(chatId) {
       return signedIn()
         && exists(/databases/$(database)/documents/chats/$(chatId))
@@ -115,6 +136,17 @@ service cloud.firestore {
           || isBuildingAdmin(resource.data.buildingId)
         );
       allow delete: if false;
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if canReadBuildingNotification(resource.data);
+      allow create: if signedIn()
+        && request.resource.data.createdBy == request.auth.uid
+        && canManageBuildingNotifications(request.resource.data.buildingId);
+      allow update: if canReadBuildingNotification(resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['readBy', 'updatedAt']);
+      allow delete: if canManageBuildingNotifications(resource.data.buildingId);
     }
 
     match /chats/{chatId} {

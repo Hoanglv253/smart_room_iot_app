@@ -19,15 +19,4 @@ class AdminInvoiceDetailViewModel extends BaseViewModel {
     );
   }
 
-  Future<bool> rejectPayment({
-    required String buildingId,
-    required String invoiceId,
-  }) {
-    return runBusyAction(
-      () => _invoiceRepository.rejectPayment(
-        buildingId: buildingId,
-        invoiceId: invoiceId,
-      ),
-    );
-  }
 }

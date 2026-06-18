@@ -1,11 +1,11 @@
 {
-    "name": "smart_room_iot_app",
-    "short_name": "smart_room_iot_app",
+    "name": "ỨNG DỤNG APART-HUB HỖ TRỢ KẾT NỐI NGƯỜI THUÊ VÀ QUẢN LÝ LƯU TRÚ",
+    "short_name": "Apart-Hub",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Ứng dụng Apart-Hub hỗ trợ kết nối người thuê và quản lý lưu trú.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

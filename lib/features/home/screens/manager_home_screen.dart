@@ -7,7 +7,7 @@ import '../../feed/screens/feed_screen.dart';
 import '../../messages/screens/messages_screen.dart';
 import '../../settings/screens/basic_settings_screen.dart';
 import '../view_models/role_home_view_model.dart';
-import '../widgets/role_header.dart';
+import '../widgets/role_home_shell.dart';
 
 class ManagerHomeScreen extends StatefulWidget {
   const ManagerHomeScreen({
@@ -26,11 +26,11 @@ class ManagerHomeScreen extends StatefulWidget {
 class _ManagerHomeScreenState extends State<ManagerHomeScreen> {
   final _viewModel = RoleHomeViewModel();
 
-  static const _items = <_ManagerNavItem>[
-    _ManagerNavItem(icon: Icons.home_outlined, label: 'Trang chủ'),
-    _ManagerNavItem(icon: Icons.apartment_outlined, label: 'Tòa nhà của tôi'),
-    _ManagerNavItem(icon: Icons.chat_bubble_outline, label: 'Tin nhắn'),
-    _ManagerNavItem(icon: Icons.settings_outlined, label: 'Cài đặt'),
+  static const _items = <RoleNavItem>[
+    RoleNavItem(icon: Icons.dynamic_feed_outlined, label: 'Trang chủ'),
+    RoleNavItem(icon: Icons.apartment_outlined, label: 'Tòa nhà'),
+    RoleNavItem(icon: Icons.chat_bubble_outline, label: 'Tin nhắn'),
+    RoleNavItem(icon: Icons.settings_outlined, label: 'Cài đặt'),
   ];
 
   @override
@@ -45,59 +45,30 @@ class _ManagerHomeScreenState extends State<ManagerHomeScreen> {
       FeedScreen(user: widget.user, role: UserRole.manager),
       ManagerBuildingScreen(user: widget.user),
       MessagesScreen(user: widget.user),
-      BasicSettingsScreen(user: widget.user),
+      BasicSettingsScreen(
+        user: widget.user,
+        role: UserRole.manager,
+        onLogout: widget.onLogout,
+      ),
     ];
 
     return AnimatedBuilder(
       animation: _viewModel,
       builder: (context, _) {
-        return Scaffold(
-          appBar: AppBar(
-            backgroundColor: Colors.blueAccent,
-            foregroundColor: Colors.white,
-            automaticallyImplyLeading: false,
-            toolbarHeight: 72,
-            titleSpacing: 14,
-            title: RoleHeader(
-              user: widget.user,
-              roleLabel: 'QUẢN LÝ',
-              avatarText: 'QL',
-              avatarColor: const Color(0xFFC8E6C9),
-              avatarTextColor: const Color(0xFF1B5E20),
-            ),
-            actions: [
-              IconButton(
-                tooltip: 'Đăng xuất',
-                icon: const Icon(Icons.logout),
-                onPressed: () => widget.onLogout(context),
-              ),
-            ],
-          ),
-          body: pages[_viewModel.currentIndex],
-          bottomNavigationBar: BottomNavigationBar(
-            currentIndex: _viewModel.currentIndex,
-            type: BottomNavigationBarType.fixed,
-            selectedItemColor: Colors.blueAccent,
-            unselectedItemColor: Colors.grey,
-            onTap: _viewModel.selectIndex,
-            items: _items
-                .map(
-                  (item) => BottomNavigationBarItem(
-                    icon: Icon(item.icon),
-                    label: item.label,
-                  ),
-                )
-                .toList(),
-          ),
+        return RoleHomeShell(
+          user: widget.user,
+          role: UserRole.manager,
+          roleLabel: 'Manager',
+          avatarText: 'MG',
+          avatarColor: const Color(0xFFC8E6C9),
+          avatarTextColor: const Color(0xFF1B5E20),
+          currentIndex: _viewModel.currentIndex,
+          pages: pages,
+          items: _items,
+          onTapNav: _viewModel.selectIndex,
+          onLogout: () => widget.onLogout(context),
         );
       },
     );
   }
-}
-
-class _ManagerNavItem {
-  const _ManagerNavItem({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
 }

@@ -1,5 +1,5 @@
-name: smart_room_iot_app
-description: Smart room authentication app.
+name: apart_hub
+description: Apart-Hub app for connecting tenants and accommodation managers.
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -14,6 +14,9 @@ dependencies:
   cupertino_icons: ^1.0.8
   firebase_auth: any
   firebase_core: any
+  firebase_storage: any
+  geocoding: ^4.0.0
+  geolocator: ^14.0.2
   google_maps_flutter: any
   http: any
   image_picker: any

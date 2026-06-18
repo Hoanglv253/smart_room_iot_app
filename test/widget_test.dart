@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smart_room_iot_app/core/services/app_firestore_service.dart';
+import 'package:apart_hub/core/services/app_firestore_service.dart';
 
 void main() {
   test('UserRole labels are mapped', () {

@@ -17,7 +17,7 @@ class AuthService {
       );
       return credential.user;
     } on FirebaseAuthException catch (e) {
-      throw Exception(e.message ?? 'Dang nhap that bai');
+      throw Exception(_mapAuthErrorMessage(e, isLogin: true));
     }
   }
 
@@ -46,7 +46,7 @@ class AuthService {
 
       return user;
     } on FirebaseAuthException catch (e) {
-      throw Exception(e.message ?? 'Dang ky that bai');
+      throw Exception(_mapAuthErrorMessage(e, isLogin: false));
     }
   }
 
@@ -60,5 +60,49 @@ class AuthService {
 
   Future<void> logout() {
     return _auth.signOut();
+  }
+
+  String _mapAuthErrorMessage(
+    FirebaseAuthException error, {
+    required bool isLogin,
+  }) {
+    final rawMessage = (error.message ?? '').toLowerCase();
+
+    final isBlockedIdentityToolkit =
+        rawMessage.contains('signInWithPassword are blocked'.toLowerCase()) ||
+        rawMessage.contains('identitytoolkit') ||
+        rawMessage.contains('authenticationservice.signinwithpassword');
+
+    if (isBlockedIdentityToolkit) {
+      return 'Đăng nhập tìm thỏi không khả dụng do cấu hình Firebase. '
+          'Hay bat Email/Password trong Firebase Authentication và '
+          'bật Identity Toolkit API trong Google Cloud Console.';
+    }
+
+    switch (error.code) {
+      case 'invalid-email':
+        return 'Email không hợp lệ.';
+      case 'user-not-found':
+        return 'Không tìm thấy tài khoản với email này.';
+      case 'wrong-password':
+      case 'invalid-credential':
+        return isLogin ? 'Email hoặc mật khẩu không đúng.' : 'Thông tin đăng ký không hợp lệ.';
+      case 'user-disabled':
+        return 'Tài khoản đã bị vô hiệu hóa.';
+      case 'too-many-requests':
+        return 'Ban thử quá nhiều lần. Vui lòng thử lại sau ít phút.';
+      case 'network-request-failed':
+        return 'Không có kết nối mạng. Vui lòng kiểm tra Internet.';
+      case 'operation-not-allowed':
+        return isLogin
+            ? 'Phương thức đăng nhập Email/Password chưa được bật trên Firebase.'
+            : 'Phương thức đăng nhập Email/Password chưa được bật trên Firebase.';
+      case 'email-already-in-use':
+        return 'Email này đã được sử dụng.';
+      case 'weak-password':
+        return 'Mật khẩu quá yếu. Vui lòng dùng mật khẩu mạnh hơn.';
+      default:
+        return isLogin ? 'Đăng nhập thất bại. Vui lòng thử lại.' : 'Đăng ký thất bại. Vui lòng thử lại.';
+    }
   }
 }

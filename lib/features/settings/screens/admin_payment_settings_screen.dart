@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_theme.dart';
 import 'admin_settings_widgets.dart';
 
 class AdminPaymentSettingsScreen extends StatefulWidget {
@@ -64,59 +65,98 @@ class _AdminPaymentSettingsScreenState
 
   @override
   Widget build(BuildContext context) {
+    final bankName = _value(widget.bankNameController, 'Ngân hàng');
+    final accountNumber = _value(widget.bankAccountNumberController, 'Chưa có STK');
+    final accountHolder = _value(widget.bankAccountHolderController, 'Chủ tài khoản');
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Thanh toan')),
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+        title: const Text(
+          'Thanh toán',
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          AdminSettingsHeroCard(
+            icon: Icons.account_balance_outlined,
+            title: bankName,
+            subtitle: accountHolder,
+            color: const Color(0xFFF59E0B),
+            metrics: [
+              AdminSettingsHeroPill(
+                icon: Icons.credit_card_outlined,
+                label: accountNumber,
+              ),
+              AdminSettingsHeroPill(
+                icon: _payosConfigured
+                    ? Icons.verified_outlined
+                    : Icons.info_outline,
+                label: _payosConfigured ? 'PayOS Đã cấu hình' : 'PayOS chưa cấu hình',
+              ),
+            ],
+          ),
           AdminSettingsSection(
-            title: 'Thong tin chuyen khoan',
+            title: 'Thông tin chuyển khoản',
             subtitle:
-                'Nguoi thue se nhin thay thong tin nay trong chi tiet hoa don.',
+                'Người thuê sẽ nhìn thấy thông tin này trong chi tiết hóa đơn.',
+            icon: Icons.payments_outlined,
+            color: const Color(0xFFF59E0B),
             children: [
               AdminSettingsTextField(
                 controller: widget.bankNameController,
-                label: 'Ten ngan hang',
+                label: 'Tên ngân hàng',
+                onChanged: (_) => setState(() {}),
               ),
               AdminSettingsTextField(
                 controller: widget.bankIdController,
-                label: 'Ma ngan hang VietQR',
+                label: 'Ma ngân hàng VietQR',
                 helperText:
-                    'Nhap BIN hoac code ngan hang, vi du MB, VCB, 970436.',
+                    'Nhập BIN hoặc code ngân hàng, ví dụ MB, VCB, 970436.',
               ),
               AdminSettingsTextField(
                 controller: widget.bankAccountNumberController,
-                label: 'So tai khoan',
+                label: 'Số tài khoản',
                 keyboardType: TextInputType.number,
+                onChanged: (_) => setState(() {}),
               ),
               AdminSettingsTextField(
                 controller: widget.bankAccountHolderController,
-                label: 'Chu tai khoan',
+                label: 'Chủ tài khoản',
+                onChanged: (_) => setState(() {}),
               ),
               AdminSettingsTextField(
                 controller: widget.transferContentController,
-                label: 'Noi dung chuyen khoan mau',
+                label: 'Nội dung chuyển khoản mẫu',
                 helperText:
-                    'Co the dung {room}, {month}, {year}, {name} de app tu thay.',
+                    'Có thể dùng {room}, {month}, {year}, {name} để app tự thay.',
                 maxLines: 2,
               ),
               AdminSettingsAsyncButton(
                 onPressed: widget.onSaveBuilding,
                 icon: Icons.save_outlined,
-                label: 'Luu thong tin chuyen khoan',
+                label: 'Lưu thông tin chuyển khoản',
               ),
             ],
           ),
           AdminSettingsSection(
-            title: 'PayOS tu dong',
+            title: 'PayOS từ dong',
             subtitle:
-                'Dung de PayOS bao webhook ve backend va app tu xac nhan hoa don.',
+                'Dùng để PayOS báo webhook về backend và app tự xác nhận hóa đơn.',
+            icon: Icons.verified_user_outlined,
+            color: _payosConfigured
+                ? AppColors.managerAccent
+                : const Color(0xFFF59E0B),
             children: [
               AdminPayosStatusBox(
                 configured: _payosConfigured,
                 message:
                     _payosStatusMessage ??
-                    'PayOS se tu xac nhan hoa don khi ngan hang bao giao dich.',
+                    'PayOS sẽ từ xác nhận hóa đơn khi ngân hàng bao giao dịch.',
               ),
               const SizedBox(height: 12),
               AdminSettingsTextField(
@@ -134,19 +174,24 @@ class _AdminPaymentSettingsScreenState
                 label: 'Checksum Key PayOS',
                 obscureText: true,
                 helperText:
-                    'App khong hien lai key cu. Nhap du 3 o neu muon cap nhat.',
+                    'App không hiển thị lại key cũ. Nhập đủ 3 ô nếu muốn cập nhật.',
               ),
               AdminSettingsAsyncButton(
                 onPressed: _savePayosSettings,
                 icon: Icons.verified_user_outlined,
                 label: _payosConfigured
-                    ? 'Cap nhat PayOS'
-                    : 'Luu cau hinh PayOS',
+                    ? 'Cập nhật PayOS'
+                    : 'Lưu cấu hình PayOS',
               ),
             ],
           ),
         ],
       ),
     );
+  }
+
+  static String _value(TextEditingController controller, String fallback) {
+    final text = controller.text.trim();
+    return text.isEmpty ? fallback : text;
   }
 }

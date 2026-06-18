@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/data/vietnam_admin_units.dart';
+import '../../../core/theme/app_theme.dart';
 
 class AdminSettingsMenuTile extends StatelessWidget {
   const AdminSettingsMenuTile({
@@ -40,40 +41,80 @@ class AdminSettingsSection extends StatelessWidget {
     required this.title,
     required this.children,
     this.subtitle,
+    this.icon,
+    this.color = AppColors.primary,
     super.key,
   });
 
   final String title;
   final String? subtitle;
   final List<Widget> children;
+  final IconData? icon;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            if (subtitle != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                subtitle!,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: Colors.black54),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0F172A).withValues(alpha: 0.045),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  if (icon != null) ...[
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.11),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Icon(icon, color: color),
+                    ),
+                    const SizedBox(width: 12),
+                  ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w900),
+                        ),
+                        if (subtitle != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            subtitle!,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: AppColors.textSecondary),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
               ),
+              const SizedBox(height: 16),
+              ...children,
             ],
-            const SizedBox(height: 12),
-            ...children,
-          ],
+          ),
         ),
       ),
     );
@@ -115,7 +156,24 @@ class AdminSettingsTextField extends StatelessWidget {
         decoration: InputDecoration(
           labelText: label,
           helperText: helperText,
-          border: const OutlineInputBorder(),
+          filled: true,
+          fillColor: const Color(0xFFF8FAFC),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 15,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(18),
+            borderSide: const BorderSide(color: AppColors.border),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(18),
+            borderSide: const BorderSide(color: AppColors.border),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(18),
+            borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+          ),
         ),
       ),
     );
@@ -145,10 +203,23 @@ class AdminProvinceDropdown extends StatelessWidget {
       child: DropdownButtonFormField<String>(
         initialValue: currentValue.isEmpty ? null : currentValue,
         isExpanded: true,
-        decoration: const InputDecoration(
-          labelText: 'Tinh/thanh pho',
-          helperText: 'Dung cho bo loc khu vuc va dia chi moi.',
-          border: OutlineInputBorder(),
+        decoration: InputDecoration(
+          labelText: 'Tỉnh/thành pho',
+          helperText: 'Dùng cho bộ lọc khu vực và địa chỉ mới.',
+          filled: true,
+          fillColor: const Color(0xFFF8FAFC),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 15,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(18),
+            borderSide: const BorderSide(color: AppColors.border),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(18),
+            borderSide: const BorderSide(color: AppColors.border),
+          ),
         ),
         items: names
             .map(
@@ -171,20 +242,79 @@ class AdminSettingsSwitch extends StatelessWidget {
     required this.title,
     required this.value,
     required this.onChanged,
+    this.subtitle,
+    this.icon,
+    this.color = AppColors.primary,
     super.key,
   });
 
   final String title;
   final bool value;
   final ValueChanged<bool> onChanged;
+  final String? subtitle;
+  final IconData? icon;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    return SwitchListTile(
-      contentPadding: EdgeInsets.zero,
-      title: Text(title),
-      value: value,
-      onChanged: onChanged,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: () => onChanged(!value),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: value
+                ? color.withValues(alpha: 0.08)
+                : const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: value ? color.withValues(alpha: 0.22) : AppColors.border,
+            ),
+          ),
+          child: Row(
+            children: [
+              if (icon != null) ...[
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: value
+                        ? color.withValues(alpha: 0.14)
+                        : Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(icon, color: value ? color : AppColors.textSecondary),
+                ),
+                const SizedBox(width: 12),
+              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        subtitle!,
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Switch(value: value, onChanged: onChanged),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -213,17 +343,26 @@ class AdminLocationPickerButton extends StatelessWidget {
           OutlinedButton.icon(
             onPressed: onPressed,
             icon: const Icon(Icons.add_location_alt_outlined),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(54),
+              foregroundColor: AppColors.primary,
+              side: const BorderSide(color: AppColors.border),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+            ),
             label: Text(
-              hasLocation ? 'Doi vi tri tren ban do' : 'Chon tren ban do',
+              hasLocation ? 'Đổi vị trí trên bản đồ' : 'Chọn trên bản đồ',
             ),
           ),
           if (hasLocation) ...[
             const SizedBox(height: 6),
             Text(
-              'Toa do da chon: ${lat.toStringAsFixed(6)}, ${lng.toStringAsFixed(6)}',
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: Colors.black54),
+              'Tọa độ Đã chọn: ${lat.toStringAsFixed(6)}, ${lng.toStringAsFixed(6)}',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w700,
+                  ),
             ),
           ],
         ],
@@ -249,14 +388,14 @@ class AdminPayosStatusBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = configured ? Colors.green : Colors.orange;
+    final color = configured ? AppColors.managerAccent : const Color(0xFFF59E0B);
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
       child: Row(
@@ -267,7 +406,12 @@ class AdminPayosStatusBox extends StatelessWidget {
             color: color,
           ),
           const SizedBox(width: 10),
-          Expanded(child: Text(message)),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
         ],
       ),
     );
@@ -311,6 +455,10 @@ class _AdminSettingsAsyncButtonState extends State<AdminSettingsAsyncButton> {
   Widget build(BuildContext context) {
     final button = FilledButton.icon(
       onPressed: _isBusy ? null : _handlePressed,
+      style: FilledButton.styleFrom(
+        minimumSize: const Size.fromHeight(56),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      ),
       icon: _isBusy
           ? const SizedBox(
               width: 18,
@@ -351,10 +499,203 @@ class AdminPermissionErrorView extends StatelessWidget {
             OutlinedButton.icon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh),
-              label: const Text('Thu lai'),
+              label: const Text('Thử lại'),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class AdminSettingsHeroCard extends StatelessWidget {
+  const AdminSettingsHeroCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.metrics = const [],
+    this.color = AppColors.primary,
+    super.key,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final List<Widget> metrics;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.primary, color],
+        ),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.18),
+            blurRadius: 22,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            right: -26,
+            top: -34,
+            child: Icon(
+              icon,
+              size: 132,
+              color: Colors.white.withValues(alpha: 0.10),
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.18),
+                  ),
+                ),
+                child: Icon(icon, color: Colors.white),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.78),
+                  height: 1.35,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              if (metrics.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Wrap(spacing: 8, runSpacing: 8, children: metrics),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class AdminSettingsHeroPill extends StatelessWidget {
+  const AdminSettingsHeroPill({
+    required this.icon,
+    required this.label,
+    super.key,
+  });
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.white, size: 15),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class AdminSettingsInfoCard extends StatelessWidget {
+  const AdminSettingsInfoCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+    super.key,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color.withValues(alpha: 0.14)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.88),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
