@@ -20,6 +20,9 @@ class AppFirestoreService {
   static CollectionReference<Map<String, dynamic>> get chats =>
       db.collection('chats');
 
+  static CollectionReference<Map<String, dynamic>> get notifications =>
+      db.collection('notifications');
+
   static CollectionReference<Map<String, dynamic>> buildingRooms(
     String buildingId,
   ) {
@@ -119,4 +122,23 @@ class InvoiceStatus {
   static const paid = 'paid';
   static const overdue = 'overdue';
   static const cancelled = 'cancelled';
+}
+
+class NotificationType {
+  NotificationType._();
+
+  static const announcement = 'announcement';
+  static const invoice = 'invoice';
+  static const request = 'request';
+  static const payment = 'payment';
+  static const system = 'system';
+}
+
+class NotificationAudience {
+  NotificationAudience._();
+
+  static const building = 'building';
+  static const tenants = 'tenants';
+  static const staff = 'staff';
+  static const room = 'room';
 }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/services/app_firestore_service.dart';
+import '../../../core/theme/app_theme.dart';
 import '../view_models/invoice_list_view_model.dart';
 import '../view_models/tenant_invoice_detail_view_model.dart';
 
@@ -21,12 +22,12 @@ class _InvoiceStatusOption {
 }
 
 const _invoiceStatusOptions = [
-  _InvoiceStatusOption(_allInvoiceStatus, 'Tat ca'),
-  _InvoiceStatusOption(InvoiceStatus.unpaid, 'Chua TT'),
-  _InvoiceStatusOption(InvoiceStatus.waitingPayment, 'Dang TT'),
-  _InvoiceStatusOption(InvoiceStatus.pending, 'Cho xac nhan'),
-  _InvoiceStatusOption(InvoiceStatus.paid, 'Da TT'),
-  _InvoiceStatusOption(InvoiceStatus.overdue, 'Qua han'),
+  _InvoiceStatusOption(_allInvoiceStatus, 'Tất cả'),
+  _InvoiceStatusOption(InvoiceStatus.unpaid, 'Chưa TT'),
+  _InvoiceStatusOption(InvoiceStatus.waitingPayment, 'Đang TT'),
+  _InvoiceStatusOption(InvoiceStatus.pending, 'Cho xác nhận'),
+  _InvoiceStatusOption(InvoiceStatus.paid, 'Đã TT'),
+  _InvoiceStatusOption(InvoiceStatus.overdue, 'Quá hạn'),
 ];
 
 class TenantInvoiceScreen extends StatefulWidget {
@@ -57,7 +58,11 @@ class _TenantInvoiceScreenState extends State<TenantInvoiceScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Hoa don cua toi')),
+      appBar: AppBar(
+        title: const Text('Hóa đơn của tôi'),
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+      ),
       body: AnimatedBuilder(
         animation: _viewModel,
         builder: (context, _) {
@@ -70,7 +75,7 @@ class _TenantInvoiceScreenState extends State<TenantInvoiceScreen> {
               if (snapshot.hasError) {
                 return const _TenantInvoiceEmptyView(
                   icon: Icons.lock_outline,
-                  message: 'Khong tai duoc hoa don.',
+                  message: 'Không tải được hóa đơn.',
                 );
               }
 
@@ -83,6 +88,7 @@ class _TenantInvoiceScreenState extends State<TenantInvoiceScreen> {
                   return doc.data()['roomId'] == widget.roomId;
                 }),
               );
+              final monthlyInvoices = _viewModel.monthlyInvoices(invoices);
               final yearOptions = _viewModel.yearOptions(invoices);
               final periodPicker = _TenantInvoicePeriodPicker(
                 month: _viewModel.selectedMonth,
@@ -100,38 +106,66 @@ class _TenantInvoiceScreenState extends State<TenantInvoiceScreen> {
 
               if (invoices.isEmpty) {
                 return ListView(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                   children: [
+                    _TenantInvoiceHeroCard(
+                      month: _viewModel.selectedMonth,
+                      year: _viewModel.selectedYear,
+                      invoiceCount: 0,
+                      totalAmount: 0,
+                      paidCount: 0,
+                      dueCount: 0,
+                    ),
+                    const SizedBox(height: 14),
                     periodPicker,
+                    const SizedBox(height: 14),
                     const _TenantInvoiceEmptyView(
                       icon: Icons.receipt_long_outlined,
-                      message: 'Phong cua ban chua co hoa don.',
+                      message: 'Phòng của bạn chưa có hóa đơn.',
                     ),
                   ],
                 );
               }
 
-              final monthlyInvoices = _viewModel.monthlyInvoices(invoices);
               final filteredInvoices = _viewModel.filteredInvoices(
                 monthlyInvoices,
               );
+              final monthlyTotal = monthlyInvoices.fold<int>(
+                0,
+                (total, doc) => total + _readInt(doc.data()['totalAmount']),
+              );
+              final paidCount = monthlyInvoices.where((doc) {
+                return (doc.data()['status'] ?? InvoiceStatus.unpaid)
+                        .toString() ==
+                    InvoiceStatus.paid;
+              }).length;
+              final dueCount = monthlyInvoices.length - paidCount;
 
               return ListView(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                 children: [
+                  _TenantInvoiceHeroCard(
+                    month: _viewModel.selectedMonth,
+                    year: _viewModel.selectedYear,
+                    invoiceCount: monthlyInvoices.length,
+                    totalAmount: monthlyTotal,
+                    paidCount: paidCount,
+                    dueCount: dueCount,
+                  ),
+                  const SizedBox(height: 14),
                   periodPicker,
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 14),
                   _TenantInvoiceStatusFilterBar(
                     invoices: monthlyInvoices,
                     selectedStatus: _viewModel.selectedStatus,
                     onChanged: _viewModel.setStatus,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 14),
                   if (filteredInvoices.isEmpty)
                     _TenantInvoiceEmptyView(
                       icon: Icons.event_busy_outlined,
                       message:
-                          'Khong co hoa don ${_statusFilterText(_viewModel.selectedStatus)}trong thang ${_viewModel.selectedMonth}/${_viewModel.selectedYear}.',
+                          'Không có hóa đơn ${_statusFilterText(_viewModel.selectedStatus)}trong tháng ${_viewModel.selectedMonth}/${_viewModel.selectedYear}.',
                     )
                   else ...[
                     _TenantInvoiceMonthHeader(
@@ -146,7 +180,7 @@ class _TenantInvoiceScreenState extends State<TenantInvoiceScreen> {
                             total + _readInt(doc.data()['totalAmount']),
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 10),
                     ...filteredInvoices.map((doc) {
                       final data = doc.data();
                       final status =
@@ -154,37 +188,21 @@ class _TenantInvoiceScreenState extends State<TenantInvoiceScreen> {
 
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 10),
-                        child: Card(
-                          elevation: 1,
-                          child: ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor:
-                                  _statusColor(status).withValues(alpha: 0.14),
-                              child: Icon(
-                                Icons.receipt_long_outlined,
-                                color: _statusColor(status),
-                              ),
-                            ),
-                            title: Text(_periodLabel(data)),
-                            subtitle: Text(_statusLabel(status)),
-                            trailing: Text(
-                              _money(data['totalAmount']),
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => _TenantInvoiceDetailScreen(
-                                    buildingId: widget.buildingId,
-                                    invoiceId: doc.id,
-                                    invoice: data,
-                                    user: widget.user,
-                                  ),
+                        child: _TenantInvoiceCard(
+                          data: data,
+                          status: status,
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => _TenantInvoiceDetailScreen(
+                                  buildingId: widget.buildingId,
+                                  invoiceId: doc.id,
+                                  invoice: data,
+                                  user: widget.user,
                                 ),
-                              );
-                            },
-                          ),
+                              ),
+                            );
+                          },
                         ),
                       );
                     }),
@@ -195,6 +213,295 @@ class _TenantInvoiceScreenState extends State<TenantInvoiceScreen> {
             },
           );
         },
+      ),
+    );
+  }
+}
+
+class _TenantInvoiceHeroCard extends StatelessWidget {
+  const _TenantInvoiceHeroCard({
+    required this.month,
+    required this.year,
+    required this.invoiceCount,
+    required this.totalAmount,
+    required this.paidCount,
+    required this.dueCount,
+  });
+
+  final int month;
+  final int year;
+  final int invoiceCount;
+  final int totalAmount;
+  final int paidCount;
+  final int dueCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: AppTheme.primaryGradient(),
+        borderRadius: BorderRadius.circular(26),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.22),
+            blurRadius: 22,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            right: -26,
+            top: -32,
+            child: Icon(
+              Icons.receipt_long_rounded,
+              color: Colors.white.withValues(alpha: 0.12),
+              size: 148,
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Icon(
+                      Icons.calendar_month_outlined,
+                      color: Colors.white,
+                      size: 30,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Tháng $month/$year',
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w900,
+                              ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '$invoiceCount hóa đơn trong kỳ này',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Text(
+                _money(totalAmount),
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                    ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: _TenantInvoiceMetric(
+                      label: 'Đã TT',
+                      value: paidCount,
+                      color: const Color(0xFF22C55E),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _TenantInvoiceMetric(
+                      label: 'Cần xem',
+                      value: dueCount,
+                      color: const Color(0xFFFACC15),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TenantInvoiceMetric extends StatelessWidget {
+  const _TenantInvoiceMetric({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final int value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 9,
+            height: 9,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          Text(
+            '$value',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TenantInvoiceCard extends StatelessWidget {
+  const _TenantInvoiceCard({
+    required this.data,
+    required this.status,
+    required this.onTap,
+  });
+
+  final Map<String, dynamic> data;
+  final String status;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final statusColor = _statusColor(status);
+
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(22),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: AppColors.border),
+            boxShadow: [
+              BoxShadow(
+                color: statusColor.withValues(alpha: 0.06),
+                blurRadius: 16,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Icon(
+                  Icons.receipt_long_outlined,
+                  color: statusColor,
+                  size: 29,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _text(data['roomName'], 'Phòng của tôi'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          _money(data['totalAmount']),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      _periodLabel(data),
+                      style: const TextStyle(color: AppColors.textSecondary),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        _InvoiceStatusPill(status: status),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Hạn: ${_dateText(data['dueDate'])}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -258,62 +565,113 @@ class _TenantInvoicePeriodPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 1,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            Expanded(
-              child: InputDecorator(
-                decoration: const InputDecoration(
-                  labelText: 'Thang',
-                  border: OutlineInputBorder(),
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _InvoiceDropdownShell(
+              label: 'Tháng',
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<int>(
+                  value: month,
                   isDense: true,
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<int>(
-                    value: month,
-                    isDense: true,
-                    isExpanded: true,
-                    items: [
-                      for (var index = 1; index <= 12; index++)
-                        DropdownMenuItem(
-                          value: index,
-                          child: Text('Thang $index'),
-                        ),
-                    ],
-                    onChanged: onMonthChanged,
-                  ),
+                  isExpanded: true,
+                  items: [
+                    for (var index = 1; index <= 12; index++)
+                      DropdownMenuItem(
+                        value: index,
+                        child: Text('Tháng $index'),
+                      ),
+                  ],
+                  onChanged: onMonthChanged,
                 ),
               ),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: InputDecorator(
-                decoration: const InputDecoration(
-                  labelText: 'Nam',
-                  border: OutlineInputBorder(),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: _InvoiceDropdownShell(
+              label: 'Năm',
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<int>(
+                  value: year,
                   isDense: true,
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<int>(
-                    value: year,
-                    isDense: true,
-                    isExpanded: true,
-                    items: [
-                      for (final item in years)
-                        DropdownMenuItem(
-                          value: item,
-                          child: Text(item.toString()),
-                        ),
-                    ],
-                    onChanged: onYearChanged,
-                  ),
+                  isExpanded: true,
+                  items: [
+                    for (final item in years)
+                      DropdownMenuItem(
+                        value: item,
+                        child: Text(item.toString()),
+                      ),
+                  ],
+                  onChanged: onYearChanged,
                 ),
               ),
             ),
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InvoiceDropdownShell extends StatelessWidget {
+  const _InvoiceDropdownShell({required this.label, required this.child});
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: label,
+        isDense: true,
+        filled: true,
+        fillColor: const Color(0xFFF8FAFC),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: AppColors.border),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: AppColors.border),
+        ),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _InvoiceStatusPill extends StatelessWidget {
+  const _InvoiceStatusPill({required this.status});
+
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _statusColor(status);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        _statusLabel(status),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w900,
         ),
       ),
     );
@@ -334,14 +692,26 @@ class _TenantInvoiceMonthHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFEFF6FF),
-        borderRadius: BorderRadius.circular(8),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.border),
       ),
       child: Row(
         children: [
-          const Icon(Icons.calendar_month_outlined, color: Color(0xFF2563EB)),
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: AppColors.primarySoft,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(
+              Icons.calendar_month_outlined,
+              color: AppColors.primary,
+            ),
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -352,8 +722,8 @@ class _TenantInvoiceMonthHeader extends StatelessWidget {
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 Text(
-                  '$invoiceCount hoa don',
-                  style: const TextStyle(color: Colors.black54),
+                  '$invoiceCount hóa đơn',
+                  style: const TextStyle(color: AppColors.textSecondary),
                 ),
               ],
             ),
@@ -361,8 +731,9 @@ class _TenantInvoiceMonthHeader extends StatelessWidget {
           Text(
             _money(totalAmount),
             style: const TextStyle(
-              color: Color(0xFF2563EB),
-              fontWeight: FontWeight.bold,
+              color: AppColors.primary,
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
             ),
           ),
         ],
@@ -433,7 +804,7 @@ class _TenantInvoiceDetailScreenState extends State<_TenantInvoiceDetailScreen> 
       mode: LaunchMode.externalApplication,
     );
     if (!opened) {
-      _showSnack('Khong mo duoc link thanh toan PayOS.');
+      _showSnack('Không mở được link thanh toán PayOS.');
     }
   }
 
@@ -451,47 +822,59 @@ class _TenantInvoiceDetailScreenState extends State<_TenantInvoiceDetailScreen> 
             status == InvoiceStatus.waitingPayment;
 
         return Scaffold(
-          appBar: AppBar(title: const Text('Chi tiet hoa don')),
+          appBar: AppBar(
+            title: const Text('Chi tiết hóa đơn'),
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+          ),
+          bottomNavigationBar: _InvoiceBottomSummary(
+            total: _readInt(invoice['totalAmount']),
+            status: status,
+          ),
           body: ListView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 116),
             children: [
               _TenantInvoiceHeader(data: invoice),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
+              _InvoicePaymentTimeline(status: status),
+              const SizedBox(height: 14),
               _TenantInvoiceSection(
-                title: 'Thong tin',
+                icon: Icons.info_outline,
+                title: 'Thông tin',
                 children: [
                   _InfoRow(
-                    label: 'Phong',
+                    label: 'Phòng',
                     value: _text(invoice['roomName'], ''),
                   ),
-                  _InfoRow(label: 'Ky hoa don', value: _periodLabel(invoice)),
+                  _InfoRow(label: 'Kỳ hóa đơn', value: _periodLabel(invoice)),
                   _InfoRow(
-                    label: 'Han thanh toan',
+                    label: 'Hạn thanh toán',
                     value: _dateText(invoice['dueDate']),
                   ),
-                  _InfoRow(label: 'Trang thai', value: _statusLabel(status)),
+                  _InfoRow(label: 'Trạng thái', value: _statusLabel(status)),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               _TenantInvoiceSection(
-                title: 'Chi tiet thanh toan',
+                icon: Icons.receipt_long_outlined,
+                title: 'Chi tiết thanh toán',
                 children: [
                   _InfoRow(
-                    label: 'Tien phong',
+                    label: 'Tiền phòng',
                     value: _money(invoice['roomRent']),
                   ),
                   _InfoRow(
-                    label: 'Tien dien',
+                    label: 'Tiền điện',
                     value:
-                        '${_readInt(invoice['electricityUsage'])} so - ${_money(invoice['electricityAmount'])}',
+                        '${_readInt(invoice['electricityUsage'])} số - ${_money(invoice['electricityAmount'])}',
                   ),
                   _InfoRow(
-                    label: 'Tien nuoc',
+                    label: 'Tiền nước',
                     value:
-                        '${_readInt(invoice['waterUsage'])} so - ${_money(invoice['waterAmount'])}',
+                        '${_readInt(invoice['waterUsage'])} số - ${_money(invoice['waterAmount'])}',
                   ),
                   _InfoRow(
-                    label: 'Phi dich vu',
+                    label: 'Phí dịch vụ',
                     value: _money(invoice['serviceFee']),
                   ),
                   _InfoRow(
@@ -499,17 +882,15 @@ class _TenantInvoiceDetailScreenState extends State<_TenantInvoiceDetailScreen> 
                     value: _money(invoice['internetFee']),
                   ),
                   _InfoRow(
-                    label: 'Gui xe',
+                    label: 'Gửi xe',
                     value: _money(invoice['parkingFee']),
                   ),
-                  _InfoRow(label: 'Phu thu', value: _money(invoice['otherFee'])),
-                  _InfoRow(label: 'Giam tru', value: _money(invoice['discount'])),
+                  _InfoRow(label: 'Phụ thu', value: _money(invoice['otherFee'])),
+                  _InfoRow(label: 'Giảm trừ', value: _money(invoice['discount'])),
                 ],
               ),
-              const SizedBox(height: 12),
-              _TotalBox(total: _readInt(invoice['totalAmount'])),
               if (canPayOnline || status == InvoiceStatus.pending) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
                 _PaymentInstructionSection(
                   buildingId: widget.buildingId,
                   invoice: invoice,
@@ -517,7 +898,7 @@ class _TenantInvoiceDetailScreenState extends State<_TenantInvoiceDetailScreen> 
                 ),
               ],
               if (canPayOnline) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
                 AnimatedBuilder(
                   animation: _viewModel,
                   builder: (context, _) {
@@ -534,18 +915,19 @@ class _TenantInvoiceDetailScreenState extends State<_TenantInvoiceDetailScreen> 
                           : const Icon(Icons.payment_outlined),
                       label: Text(
                         status == InvoiceStatus.waitingPayment
-                            ? 'Mo lai thanh toan PayOS'
-                            : 'Thanh toan tu dong PayOS',
+                            ? 'Mở lại thanh toán PayOS'
+                            : 'Thanh toán từ đếng PayOS',
                       ),
                     );
                   },
                 ),
               ],
               if (paymentNote.isNotEmpty) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
                 _TenantInvoiceSection(
-                  title: 'Ghi chu da gui',
-                  children: [_InfoRow(label: 'Noi dung', value: paymentNote)],
+                  icon: Icons.sticky_note_2_outlined,
+                  title: 'Ghi chú Đã gửi',
+                  children: [_InfoRow(label: 'Nội dung', value: paymentNote)],
                 ),
               ],
               if (status == InvoiceStatus.unpaid) ...[
@@ -559,7 +941,7 @@ class _TenantInvoiceDetailScreenState extends State<_TenantInvoiceDetailScreen> 
                   minLines: 2,
                   maxLines: 4,
                   decoration: const InputDecoration(
-                    labelText: 'Ghi chu / ma giao dich',
+                    labelText: 'Ghi chú / mã giao dịch',
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -576,7 +958,7 @@ class _TenantInvoiceDetailScreenState extends State<_TenantInvoiceDetailScreen> 
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.payments_outlined),
-                      label: const Text('Bao da thanh toan'),
+                      label: const Text('Báo đã thanh toán'),
                     );
                   },
                 ),
@@ -596,10 +978,10 @@ class _TenantInvoiceDetailScreenState extends State<_TenantInvoiceDetailScreen> 
   String _tenantPaymentError() {
     final error = _viewModel.errorMessage;
     if (error?.contains('permission-denied') == true) {
-      return 'Firestore chua cap quyen bao da thanh toan.';
+      return 'Firestore chưa cấp quyền báo đã thanh toán.';
     }
 
-    return 'Khong gui duoc thong tin thanh toan.';
+    return 'Không gửi được thông tin thanh toán.';
   }
 
   String _payosErrorMessage() {
@@ -629,7 +1011,7 @@ class _PaymentRejectedNotice extends StatelessWidget {
           SizedBox(width: 8),
           Expanded(
             child: Text(
-              'Thanh toan truoc do chua duoc xac nhan. Ban co the gui lai thong tin thanh toan.',
+              'Thanh toán trước đó chưa được xác nhận. Bạn có thể gửi lại thông tin thanh toán.',
             ),
           ),
         ],
@@ -656,7 +1038,8 @@ class _PaymentInstructionSection extends StatelessWidget {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const _TenantInvoiceSection(
-            title: 'Huong dan thanh toan',
+            icon: Icons.account_balance_outlined,
+            title: 'Hướng dẫn thanh toán',
             children: [
               Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
@@ -668,11 +1051,12 @@ class _PaymentInstructionSection extends StatelessWidget {
 
         if (snapshot.hasError || snapshot.data == null) {
           return const _TenantInvoiceSection(
-            title: 'Huong dan thanh toan',
+            icon: Icons.account_balance_outlined,
+            title: 'Hướng dẫn thanh toán',
             children: [
               _InfoRow(
-                label: 'Trang thai',
-                value: 'Chua tai duoc thong tin chuyen khoan.',
+                label: 'Trạng thái',
+                value: 'Chưa tải được thông tin chuyển khoản.',
               ),
             ],
           );
@@ -680,31 +1064,32 @@ class _PaymentInstructionSection extends StatelessWidget {
 
         final building = snapshot.data!;
         final settings = _readMap(building['paymentSettings']);
-        final bankName = _text(settings['bankName'], 'Chua thiet lap');
+        final bankName = _text(settings['bankName'], 'Chưa thiết lập');
         final bankId = _text(settings['bankId'], '');
         final accountNumber =
-            _text(settings['bankAccountNumber'], 'Chua thiet lap');
+            _text(settings['bankAccountNumber'], 'Chưa thiết lập');
         final accountHolder =
-            _text(settings['bankAccountHolder'], 'Chua thiet lap');
+            _text(settings['bankAccountHolder'], 'Chưa thiết lập');
         final transferContent = _transferContent(
           settings['transferContentTemplate'],
           invoice,
         );
         final amount = _readInt(invoice['totalAmount']);
         final canCreateVietQr = bankId.isNotEmpty &&
-            accountNumber != 'Chua thiet lap' &&
-            accountHolder != 'Chua thiet lap' &&
+            accountNumber != 'Chưa thiết lập' &&
+            accountHolder != 'Chưa thiết lập' &&
             amount > 0;
 
         return _TenantInvoiceSection(
-          title: 'Huong dan thanh toan',
+          icon: Icons.account_balance_outlined,
+          title: 'Hướng dẫn thanh toán',
           children: [
-            _InfoRow(label: 'Ngan hang', value: bankName),
-            if (bankId.isNotEmpty) _InfoRow(label: 'Ma VietQR', value: bankId),
-            _InfoRow(label: 'So tai khoan', value: accountNumber),
-            _InfoRow(label: 'Chu tai khoan', value: accountHolder),
-            _InfoRow(label: 'So tien', value: _money(amount)),
-            _InfoRow(label: 'Noi dung', value: transferContent),
+            _InfoRow(label: 'Ngân hàng', value: bankName),
+            if (bankId.isNotEmpty) _InfoRow(label: 'Mã VietQR', value: bankId),
+            _InfoRow(label: 'Số tài khoản', value: accountNumber),
+            _InfoRow(label: 'Chủ tài khoản', value: accountHolder),
+            _InfoRow(label: 'Số tiền', value: _money(amount)),
+            _InfoRow(label: 'Nội dung', value: transferContent),
             const SizedBox(height: 12),
             if (canCreateVietQr)
               Align(
@@ -721,7 +1106,7 @@ class _PaymentInstructionSection extends StatelessWidget {
                     );
                   },
                   icon: const Icon(Icons.qr_code_2_outlined),
-                  label: const Text('Tao ma QR VietQR'),
+                  label: const Text('Tạo mã QR VietQR'),
                 ),
               )
             else
@@ -752,7 +1137,7 @@ class _PaymentInstructionSection extends StatelessWidget {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Ma QR VietQR'),
+          title: const Text('Mã QR VietQR'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -767,7 +1152,7 @@ class _PaymentInstructionSection extends StatelessWidget {
                       return const Padding(
                         padding: EdgeInsets.all(16),
                         child: Text(
-                          'Khong tai duoc ma QR. Hay kiem tra ma ngan hang VietQR.',
+                          'Không tải được mã QR. Hãy kiểm tra mã ngân hàng VietQR.',
                           textAlign: TextAlign.center,
                         ),
                       );
@@ -775,15 +1160,15 @@ class _PaymentInstructionSection extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-                _InfoRow(label: 'So tien', value: _money(amount)),
-                _InfoRow(label: 'Noi dung', value: transferContent),
+                _InfoRow(label: 'Số tiền', value: _money(amount)),
+                _InfoRow(label: 'Nội dung', value: transferContent),
               ],
             ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Dong'),
+              child: const Text('đếng'),
             ),
           ],
         );
@@ -812,7 +1197,7 @@ class _VietQrMissingNotice extends StatelessWidget {
           SizedBox(width: 8),
           Expanded(
             child: Text(
-              'Admin can nhap ma ngan hang VietQR, so tai khoan va chu tai khoan de tao QR.',
+              'Admin cần nhập mã ngân hàng VietQR, số tài khoản và chủ tài khoản để tạo QR.',
             ),
           ),
         ],
@@ -829,57 +1214,257 @@ class _TenantInvoiceHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final status = (data['status'] ?? InvoiceStatus.unpaid).toString();
+    final statusColor = _statusColor(status);
 
-    return Card(
-      elevation: 1,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              _money(data['totalAmount']),
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            Chip(
-              label: Text(_statusLabel(status)),
-              backgroundColor: _statusColor(status).withValues(alpha: 0.12),
-            ),
-          ],
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [statusColor, AppColors.primaryDark],
         ),
+        borderRadius: BorderRadius.circular(26),
+        boxShadow: [
+          BoxShadow(
+            color: statusColor.withValues(alpha: 0.22),
+            blurRadius: 22,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            right: -26,
+            top: -30,
+            child: Icon(
+              Icons.payments_rounded,
+              color: Colors.white.withValues(alpha: 0.13),
+              size: 142,
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 58,
+                height: 58,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Icon(
+                  Icons.receipt_long_outlined,
+                  color: Colors.white,
+                  size: 31,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                _money(data['totalAmount']),
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${_text(data['roomName'], 'Phòng của tôi')} - ${_periodLabel(data)}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.18),
+                  ),
+                ),
+                child: Text(
+                  _statusLabel(status),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InvoicePaymentTimeline extends StatelessWidget {
+  const _InvoicePaymentTimeline({required this.status});
+
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final waitingDone = status == InvoiceStatus.waitingPayment ||
+        status == InvoiceStatus.pending ||
+        status == InvoiceStatus.paid;
+    final paidDone = status == InvoiceStatus.paid;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          const Expanded(
+            child: _TimelineStep(
+              icon: Icons.edit_document,
+              label: 'Tạo hóa đơn',
+              done: true,
+            ),
+          ),
+          _TimelineLine(done: waitingDone),
+          Expanded(
+            child: _TimelineStep(
+              icon: Icons.hourglass_top_outlined,
+              label: 'Chờ thanh toán',
+              done: waitingDone,
+            ),
+          ),
+          _TimelineLine(done: paidDone),
+          Expanded(
+            child: _TimelineStep(
+              icon: Icons.verified_outlined,
+              label: 'Đã thanh toán',
+              done: paidDone,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TimelineStep extends StatelessWidget {
+  const _TimelineStep({
+    required this.icon,
+    required this.label,
+    required this.done,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool done;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = done ? const Color(0xFF16A34A) : AppColors.textSecondary;
+
+    return Column(
+      children: [
+        Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: done ? 0.12 : 0.08),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Icon(icon, color: color, size: 20),
+        ),
+        const SizedBox(height: 7),
+        Text(
+          label,
+          maxLines: 2,
+          textAlign: TextAlign.center,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: color,
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TimelineLine extends StatelessWidget {
+  const _TimelineLine({required this.done});
+
+  final bool done;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        height: 2,
+        margin: const EdgeInsets.only(bottom: 26),
+        color: done ? const Color(0xFF16A34A) : const Color(0xFFE2E8F0),
       ),
     );
   }
 }
 
 class _TenantInvoiceSection extends StatelessWidget {
-  const _TenantInvoiceSection({required this.title, required this.children});
+  const _TenantInvoiceSection({
+    required this.icon,
+    required this.title,
+    required this.children,
+  });
 
+  final IconData icon;
   final String title;
   final List<Widget> children;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 1,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            ...children,
-          ],
-        ),
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.primarySoft,
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: Icon(icon, color: AppColors.primary, size: 22),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ...children,
+        ],
       ),
     );
   }
@@ -894,18 +1479,26 @@ class _InfoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
+      padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 118,
-            child: Text(label, style: const TextStyle(color: Colors.black54)),
-          ),
           Expanded(
             child: Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 2,
+            child: Text(
               value,
-              style: const TextStyle(fontWeight: FontWeight.w600),
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontWeight: FontWeight.w900),
             ),
           ),
         ],
@@ -914,35 +1507,63 @@ class _InfoRow extends StatelessWidget {
   }
 }
 
-class _TotalBox extends StatelessWidget {
-  const _TotalBox({required this.total});
+class _InvoiceBottomSummary extends StatelessWidget {
+  const _InvoiceBottomSummary({required this.total, required this.status});
 
   final int total;
+  final String status;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEFF6FF),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          const Expanded(
-            child: Text(
-              'Tong thanh toan',
-              style: TextStyle(fontWeight: FontWeight.bold),
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: const Border(top: BorderSide(color: AppColors.border)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 18,
+              offset: const Offset(0, -8),
             ),
-          ),
-          Text(
-            _money(total),
-            style: const TextStyle(
-              color: Color(0xFF2563EB),
-              fontWeight: FontWeight.bold,
+          ],
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Tổng thanh toán',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    _statusLabel(status),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+            Text(
+              _money(total),
+              style: const TextStyle(
+                color: AppColors.primary,
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -975,34 +1596,34 @@ class _TenantInvoiceEmptyView extends StatelessWidget {
 String _periodLabel(Map<String, dynamic> data) {
   final month = _readInt(data['month']);
   final year = _readInt(data['year']);
-  return month > 0 && year > 0 ? 'Thang $month/$year' : 'Chua co ky';
+  return month > 0 && year > 0 ? 'Tháng $month/$year' : 'Chưa có kỳ';
 }
 
 String _dateText(Object? value) {
-  if (value is! Timestamp) return 'Chua co';
+  if (value is! Timestamp) return 'Chưa có';
   final date = value.toDate();
   return '${date.day}/${date.month}/${date.year}';
 }
 
 String _statusLabel(String status) {
   return switch (status) {
-    InvoiceStatus.waitingPayment => 'Dang thanh toan PayOS',
-    InvoiceStatus.pending => 'Cho xac nhan',
-    InvoiceStatus.paid => 'Da thanh toan',
-    InvoiceStatus.overdue => 'Qua han',
-    InvoiceStatus.cancelled => 'Da huy',
-    _ => 'Chua thanh toan',
+    InvoiceStatus.waitingPayment => 'Đang thanh toán PayOS',
+    InvoiceStatus.pending => 'Cho xác nhận',
+    InvoiceStatus.paid => 'Đã thanh toán',
+    InvoiceStatus.overdue => 'Quá hạn',
+    InvoiceStatus.cancelled => 'Đã hủy',
+    _ => 'Chưa thanh toán',
   };
 }
 
 String _statusFilterText(String status) {
   return switch (status) {
-    InvoiceStatus.unpaid => 'chua thanh toan ',
-    InvoiceStatus.waitingPayment => 'dang thanh toan ',
-    InvoiceStatus.pending => 'cho xac nhan ',
-    InvoiceStatus.paid => 'da thanh toan ',
-    InvoiceStatus.overdue => 'qua han ',
-    InvoiceStatus.cancelled => 'da huy ',
+    InvoiceStatus.unpaid => 'chưa thanh toán ',
+    InvoiceStatus.waitingPayment => 'Đang thanh toán ',
+    InvoiceStatus.pending => 'cho xác nhận ',
+    InvoiceStatus.paid => 'đã thanh toán ',
+    InvoiceStatus.overdue => 'quá hạn ',
+    InvoiceStatus.cancelled => 'đã hủy ',
     _ => '',
   };
 }
@@ -1040,9 +1661,9 @@ String _transferContent(Object? template, Map<String, dynamic> invoice) {
   final rawTemplate = template?.toString().trim() ?? '';
   final month = _readInt(invoice['month']);
   final year = _readInt(invoice['year']);
-  final room = _text(invoice['roomName'], 'Phong');
-  final tenantName = _text(invoice['tenantName'], 'Nguoi thue');
-  final fallback = 'Thanh toan $room thang $month/$year';
+  final room = _text(invoice['roomName'], 'Phòng');
+  final tenantName = _text(invoice['tenantName'], 'Người thuê');
+  final fallback = 'Thanh toán $room tháng $month/$year';
 
   final resolvedTemplate = rawTemplate.isEmpty ? fallback : rawTemplate;
   return resolvedTemplate

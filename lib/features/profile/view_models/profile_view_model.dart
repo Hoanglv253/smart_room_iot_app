@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../core/view_models/base_view_model.dart';
 import '../repositories/profile_repository.dart';
@@ -30,6 +31,18 @@ class ProfileViewModel extends BaseViewModel {
         bio: bio,
         address: address,
         avatarUrl: avatarUrl,
+      ),
+    );
+  }
+
+  Future<String?> uploadAvatarImage({
+    required User user,
+    required XFile image,
+  }) {
+    return runBusyTask(
+      () => _profileRepository.uploadAvatarImage(
+        uid: user.uid,
+        image: image,
       ),
     );
   }

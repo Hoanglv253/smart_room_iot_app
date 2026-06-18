@@ -97,7 +97,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         SizedBox(height: fs(32)),
                         Text(
-                          'Dang nhap',
+                          'Đăng nhập',
                           style: TextStyle(
                             color: const Color(0xFF111827),
                             fontSize: fs(42),
@@ -106,7 +106,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         SizedBox(height: fs(6)),
                         Text(
-                          'Chao mung ban tro lai',
+                          'Chào mừng bạn trở lại',
                           style: TextStyle(
                             color: const Color(0xFF4B5563),
                             fontSize: fs(16),
@@ -143,7 +143,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           controller: _passwordController,
                           obscureText: _viewModel.obscurePassword,
                           decoration: InputDecoration(
-                            hintText: 'Mat khau',
+                            hintText: 'Mật khẩu',
                             contentPadding: const EdgeInsets.symmetric(
                               horizontal: 18,
                               vertical: 16,
@@ -178,7 +178,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: TextButton(
                             onPressed: () {},
                             child: Text(
-                              'Quen mat khau?',
+                              'Quên mật khẩu?',
                               style: TextStyle(
                                 color: const Color(0xFF1E4F93),
                                 fontSize: fs(14),
@@ -209,7 +209,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ),
                                   )
                                 : Text(
-                                    'Dang nhap',
+                                    'Đăng nhập',
                                     style: TextStyle(
                                       fontSize: fs(20),
                                       fontWeight: FontWeight.w700,
@@ -224,7 +224,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           spacing: 2,
                           children: [
                             Text(
-                              'Chua co tai khoan?',
+                              'Chưa có tài khoản?',
                               style: TextStyle(
                                 color: const Color(0xFF111827),
                                 fontSize: fs(16),
@@ -247,7 +247,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
                               child: Text(
-                                'Dang ky',
+                                'Đăng ký',
                                 style: TextStyle(
                                   color: AppColors.primary,
                                   fontSize: fs(16),

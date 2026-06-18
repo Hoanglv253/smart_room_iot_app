@@ -35,7 +35,7 @@ class _AdminMemberProfileScreenState extends State<AdminMemberProfileScreen> {
     return (widget.userData['name'] ??
             widget.userData['displayName'] ??
             widget.userData['email'] ??
-            'Tai khoan')
+            'Tài khoản')
         .toString();
   }
 
@@ -58,18 +58,18 @@ class _AdminMemberProfileScreenState extends State<AdminMemberProfileScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Xoa khoi toa nha?'),
+          title: const Text('Xóa khỏi tòa nhà?'),
           content: Text(
-            'Ban co chac muon xoa $_name khoi ${widget.buildingName}?',
+            'Bạn có chắc muốn xóa $_name khỏi ${widget.buildingName}?',
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Huy'),
+              child: const Text('Hủy'),
             ),
             FilledButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Xoa'),
+              child: const Text('Xóa'),
             ),
           ],
         );
@@ -91,7 +91,7 @@ class _AdminMemberProfileScreenState extends State<AdminMemberProfileScreen> {
     if (removed) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Da xoa tai khoan khoi toa nha.')),
+        const SnackBar(content: Text('Đã xóa tài khoản khỏi tòa nhà.')),
       );
       Navigator.of(context).pop();
       return;
@@ -105,16 +105,16 @@ class _AdminMemberProfileScreenState extends State<AdminMemberProfileScreen> {
 
   String _removeErrorMessage() {
     if (_viewModel.errorMessage?.contains('permission-denied') == true) {
-      return 'Firestore chua cap quyen xoa thanh vien khoi toa nha.';
+      return 'Firestore chưa cấp quyền xóa thành viên khỏi tòa nhà.';
     }
 
-    return 'Khong xoa duoc thanh vien.';
+    return 'Không xóa được thành viên.';
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Ho so thanh vien')),
+      appBar: AppBar(title: const Text('Hồ sơ thành viên')),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -169,7 +169,7 @@ class _AdminMemberProfileScreenState extends State<AdminMemberProfileScreen> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.person_remove_outlined),
-                    label: const Text('Xoa khoi toa nha'),
+                    label: const Text('Xóa khỏi tòa nhà'),
                   );
                 },
               ),

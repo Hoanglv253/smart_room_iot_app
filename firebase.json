@@ -3,14 +3,14 @@
     "platforms": {
       "android": {
         "default": {
-          "projectId": "unified-chess-496306-u1",
+          "projectId": "smart-room-iot-353c5",
           "appId": "1:537792897840:android:f68f18dc17329f2ade1ef5",
           "fileOutput": "android/app/google-services.json"
         }
       },
       "dart": {
         "lib/firebase_options.dart": {
-          "projectId": "unified-chess-496306-u1",
+          "projectId": "smart-room-iot-353c5",
           "configurations": {
             "android": "1:537792897840:android:f68f18dc17329f2ade1ef5",
             "ios": "1:537792897840:ios:3cb0d8f27a6e5fc1de1ef5",
@@ -24,6 +24,9 @@
   },
   "firestore": {
     "rules": "firestore.rules"
+  },
+  "storage": {
+    "rules": "storage.rules"
   },
   "functions": {
     "source": "functions"

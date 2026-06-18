@@ -6,7 +6,7 @@ import '../services/map_service.dart';
 class BuildingMapPreview extends StatelessWidget {
   const BuildingMapPreview({
     required this.building,
-    this.title = 'Vi tri toa nha',
+    this.title = 'Vị trí tòa nhà',
     super.key,
   });
 
@@ -47,7 +47,7 @@ class BuildingMapPreview extends StatelessWidget {
               _GoogleMapBox(
                 latitude: lat,
                 longitude: lng,
-                title: _text(building['name'], 'Toa nha'),
+                title: _text(building['name'], 'Tòa nhà'),
               )
             else
               _MapFallbackBox(
@@ -64,7 +64,7 @@ class BuildingMapPreview extends StatelessWidget {
                     ? () => _openDirections(context)
                     : null,
                 icon: const Icon(Icons.directions_outlined),
-                label: const Text('Chi duong'),
+                label: const Text('Chỉ đường'),
               ),
             ),
           ],
@@ -78,7 +78,7 @@ class BuildingMapPreview extends StatelessWidget {
     if (!context.mounted || opened) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Khong mo duoc Google Maps.')),
+      const SnackBar(content: Text('Không mở được Google Maps.')),
     );
   }
 
@@ -170,8 +170,8 @@ class _MapFallbackBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final message = !hasAddress
-        ? 'Chua co dia chi toa nha.'
-        : 'Chua co toa do. Admin co the vao Cai dat va chon vi tri tren ban do.';
+        ? 'Chưa có Địa chỉ tòa nhà.'
+        : 'Chưa có tọa độ. Admin có thể vào Cài đặt và chọn vị trí trên bản đồ.';
 
     return Container(
       height: 150,

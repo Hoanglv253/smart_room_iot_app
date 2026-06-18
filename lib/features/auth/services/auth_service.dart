@@ -74,35 +74,35 @@ class AuthService {
         rawMessage.contains('authenticationservice.signinwithpassword');
 
     if (isBlockedIdentityToolkit) {
-      return 'Dang nhap tam thoi khong kha dung do cau hinh Firebase. '
-          'Hay bat Email/Password trong Firebase Authentication va '
-          'bat Identity Toolkit API trong Google Cloud Console.';
+      return 'Đăng nhập tìm thỏi không khả dụng do cấu hình Firebase. '
+          'Hay bat Email/Password trong Firebase Authentication và '
+          'bật Identity Toolkit API trong Google Cloud Console.';
     }
 
     switch (error.code) {
       case 'invalid-email':
-        return 'Email khong hop le.';
+        return 'Email không hợp lệ.';
       case 'user-not-found':
-        return 'Khong tim thay tai khoan voi email nay.';
+        return 'Không tìm thấy tài khoản với email này.';
       case 'wrong-password':
       case 'invalid-credential':
-        return isLogin ? 'Email hoac mat khau khong dung.' : 'Thong tin dang ky khong hop le.';
+        return isLogin ? 'Email hoặc mật khẩu không đúng.' : 'Thông tin đăng ký không hợp lệ.';
       case 'user-disabled':
-        return 'Tai khoan da bi vo hieu hoa.';
+        return 'Tài khoản đã bị vô hiệu hóa.';
       case 'too-many-requests':
-        return 'Ban thu qua nhieu lan. Vui long thu lai sau it phut.';
+        return 'Ban thử quá nhiều lần. Vui lòng thử lại sau ít phút.';
       case 'network-request-failed':
-        return 'Khong co ket noi mang. Vui long kiem tra Internet.';
+        return 'Không có kết nối mạng. Vui lòng kiểm tra Internet.';
       case 'operation-not-allowed':
         return isLogin
-            ? 'Phuong thuc dang nhap Email/Password chua duoc bat tren Firebase.'
-            : 'Phuong thuc dang ky Email/Password chua duoc bat tren Firebase.';
+            ? 'Phương thức đăng nhập Email/Password chưa được bật trên Firebase.'
+            : 'Phương thức đăng nhập Email/Password chưa được bật trên Firebase.';
       case 'email-already-in-use':
-        return 'Email nay da duoc su dung.';
+        return 'Email này đã được sử dụng.';
       case 'weak-password':
-        return 'Mat khau qua yeu. Vui long dung mat khau manh hon.';
+        return 'Mật khẩu quá yếu. Vui lòng dùng mật khẩu mạnh hơn.';
       default:
-        return isLogin ? 'Dang nhap that bai. Vui long thu lai.' : 'Dang ky that bai. Vui long thu lai.';
+        return isLogin ? 'Đăng nhập thất bại. Vui lòng thử lại.' : 'Đăng ký thất bại. Vui lòng thử lại.';
     }
   }
 }

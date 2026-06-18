@@ -20,6 +20,16 @@ class AdminBuildingRepository {
     return _memberRepository.members(buildingId);
   }
 
+  Stream<QuerySnapshot<Map<String, dynamic>>> rooms(String buildingId) {
+    return AppFirestoreService.buildingRooms(
+      buildingId,
+    ).orderBy('roomNumber').snapshots();
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> invoices(String buildingId) {
+    return AppFirestoreService.buildingInvoices(buildingId).snapshots();
+  }
+
   Stream<QuerySnapshot<Map<String, dynamic>>> pendingJoinRequests(
     String buildingId,
   ) {
@@ -73,7 +83,7 @@ class AdminBuildingRepository {
         'type': ChatType.group,
         'buildingId': buildingId,
         'ownerId': adminId,
-        'title': (requestData['buildingName'] ?? 'Nhom chat toa nha')
+        'title': (requestData['buildingName'] ?? 'Nhóm chat tòa nhà')
             .toString(),
         'memberIds': [adminId, requesterId],
         'deletedFor': [],

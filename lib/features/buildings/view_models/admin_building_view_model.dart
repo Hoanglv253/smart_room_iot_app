@@ -24,6 +24,14 @@ class AdminBuildingViewModel extends BaseViewModel {
     return _buildingRepository.members(buildingId);
   }
 
+  Stream<QuerySnapshot<Map<String, dynamic>>> rooms(String buildingId) {
+    return _buildingRepository.rooms(buildingId);
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> invoices(String buildingId) {
+    return _buildingRepository.invoices(buildingId);
+  }
+
   Stream<QuerySnapshot<Map<String, dynamic>>> pendingJoinRequests(
     String buildingId,
   ) {

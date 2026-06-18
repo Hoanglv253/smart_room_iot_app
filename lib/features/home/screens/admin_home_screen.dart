@@ -1,4 +1,4 @@
-﻿import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/services/app_firestore_service.dart';
@@ -28,10 +28,10 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   final _viewModel = RoleHomeViewModel();
 
   static const _items = <RoleNavItem>[
-    RoleNavItem(icon: Icons.dynamic_feed_outlined, label: 'Feed'),
-    RoleNavItem(icon: Icons.apartment_outlined, label: 'Toa nha'),
-    RoleNavItem(icon: Icons.chat_bubble_outline, label: 'Tin nhan'),
-    RoleNavItem(icon: Icons.settings_outlined, label: 'Cai dat'),
+    RoleNavItem(icon: Icons.dynamic_feed_outlined, label: 'Trang chủ'),
+    RoleNavItem(icon: Icons.apartment_outlined, label: 'Tòa nhà'),
+    RoleNavItem(icon: Icons.chat_bubble_outline, label: 'Tin nhắn'),
+    RoleNavItem(icon: Icons.settings_outlined, label: 'Cài đặt'),
   ];
 
   @override

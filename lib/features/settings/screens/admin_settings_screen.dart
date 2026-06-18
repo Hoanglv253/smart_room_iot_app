@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/data/vietnam_admin_units.dart';
+import '../../../core/theme/app_theme.dart';
 import '../view_models/admin_settings_view_model.dart';
 import 'admin_access_display_settings_screen.dart';
 import 'admin_ad_settings_screen.dart';
@@ -140,8 +141,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
 
     if (result == null) {
       _loadError = _settingsErrorMessage(
-        permissionMessage: 'Firestore chua cap quyen doc collection buildings.',
-        fallbackMessage: 'Khong tai duoc thiet lap toa nha.',
+        permissionMessage: 'Firestore chưa cấp quyền doc collection buildings.',
+        fallbackMessage: 'Không tải được thiết lập tòa nhà.',
       );
     } else if (result.buildingId != null) {
       _fillBuildingForm(result.buildingId!, result.data);
@@ -244,7 +245,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       setState(() {
         _isPayosConfigured = false;
         _payosStatusMessage =
-            'Chua cau hinh PAYOS_BACKEND_URL cho app Flutter.';
+            'Chưa cấu hình PAYOS_BACKEND_URL cho app Flutter.';
       });
       return;
     }
@@ -252,7 +253,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     try {
       final idToken = await widget.user.getIdToken();
       if (idToken == null || idToken.isEmpty) {
-        throw StateError('Khong lay duoc Firebase ID token.');
+        throw StateError('Không lấy được Firebase ID token.');
       }
 
       final data = await _viewModel.loadPayosSettings(
@@ -268,14 +269,14 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       setState(() {
         _isPayosConfigured = configured;
         _payosStatusMessage = configured
-            ? 'Da cau hinh PayOS cho toa nha nay. Client ID ket thuc bang $clientIdTail.'
-            : 'Chua cau hinh PayOS rieng cho toa nha nay.';
+            ? 'Đã cấu hình PayOS cho tòa nhà này. Client ID kết thúc bằng $clientIdTail.'
+            : 'Chưa cấu hình PayOS riêng cho tòa nhà này.';
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _isPayosConfigured = false;
-        _payosStatusMessage = 'Khong tai duoc cau hinh PayOS: $error';
+        _payosStatusMessage = 'Không tải được cấu hình PayOS: $error';
       });
     }
   }
@@ -287,17 +288,17 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     final checksumKey = _payosChecksumKeyController.text.trim();
 
     if (buildingId == null || buildingId.isEmpty) {
-      _showSnack('Hay luu thiet lap toa nha truoc khi cau hinh PayOS.');
+      _showSnack('Hãy lưu thiết lập tòa nhà trước khi cấu hình PayOS.');
       return;
     }
 
     if (_payosBackendBaseUrl.isEmpty) {
-      _showSnack('Chua cau hinh PAYOS_BACKEND_URL cho app Flutter.');
+      _showSnack('Chưa cấu hình PAYOS_BACKEND_URL cho app Flutter.');
       return;
     }
 
     if (clientId.isEmpty || apiKey.isEmpty || checksumKey.isEmpty) {
-      _showSnack('Hay nhap du Client ID, API Key va Checksum Key PayOS.');
+      _showSnack('Hãy nhập du Client ID, API Key và Checksum Key PayOS.');
       return;
     }
 
@@ -307,7 +308,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     try {
       final idToken = await widget.user.getIdToken();
       if (idToken == null || idToken.isEmpty) {
-        throw StateError('Khong lay duoc Firebase ID token.');
+        throw StateError('Không lấy được Firebase ID token.');
       }
 
       data = await _viewModel.savePayosSettings(
@@ -320,7 +321,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       );
     } catch (error) {
       if (!mounted) return;
-      _showSnack('Khong luu duoc cau hinh PayOS: $error');
+      _showSnack('Không lưu được cấu hình PayOS: $error');
       setState(() => _isPayosSaving = false);
       return;
     }
@@ -328,7 +329,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     if (!mounted) return;
 
     if (data == null) {
-      _showSnack(_viewModel.errorMessage ?? 'Khong luu duoc cau hinh PayOS.');
+      _showSnack(_viewModel.errorMessage ?? 'Không lưu được cấu hình PayOS.');
       setState(() => _isPayosSaving = false);
       return;
     }
@@ -342,9 +343,9 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       _isPayosSaving = false;
       _isPayosConfigured = true;
       _payosStatusMessage =
-          'Da luu PayOS cho toa nha. Client ID ket thuc bang $clientIdTail.';
+          'Đã lưu PayOS cho tòa nhà. Client ID kết thúc bằng $clientIdTail.';
     });
-    _showSnack('Da luu cau hinh PayOS cho toa nha.');
+    _showSnack('Đã lưu cấu hình PayOS cho tòa nhà.');
   }
 
   Future<void> _saveBuilding() async {
@@ -357,22 +358,22 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     final ward = _wardController.text.trim();
 
     if (buildingName.isEmpty) {
-      _showSnack('Hay nhap ten toa nha.');
+      _showSnack('Hãy nhập tên tòa nhà.');
       return;
     }
 
     if (province.isEmpty) {
-      _showSnack('Hay chon tinh/thanh pho cua toa nha.');
+      _showSnack('Hãy chọn tỉnh/thành pho cua tòa nhà.');
       return;
     }
 
     if (ward.isEmpty) {
-      _showSnack('Hay nhap xa/phuong cua toa nha.');
+      _showSnack('Hãy nhập xã/phường cua tòa nhà.');
       return;
     }
 
     if (floorCount <= 0 || totalRooms <= 0) {
-      _showSnack('Hay nhap so tang va tong so phong hop le.');
+      _showSnack('Hãy nhập số tầng và tổng số phòng hợp lệ.');
       return;
     }
 
@@ -529,28 +530,28 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
 
   String _saveResultMessage(AdminSettingsSaveStatus status) {
     if (status == AdminSettingsSaveStatus.saved) {
-      return 'Da luu thiet lap va dong bo danh sach phong.';
+      return 'Đã lưu thiết lập và đồng bộ danh sách phòng.';
     }
 
     if (status == AdminSettingsSaveStatus.savedWithoutRooms) {
       return _settingsErrorMessage(
         permissionMessage:
-            'Da luu toa nha, nhung Firestore chua cap quyen ghi buildings/{id}/rooms.',
-        fallbackMessage: 'Da luu toa nha, nhung chua dong bo duoc phong.',
+            'Đã lưu tòa nhà, nhưng Firestore chưa cấp quyền ghi buildings/{id}/rooms.',
+        fallbackMessage: 'Đã lưu tòa nhà, nhưng chưa đồng bộ được phòng.',
       );
     }
 
     if (status == AdminSettingsSaveStatus.savedWithoutChat) {
       return _settingsErrorMessage(
         permissionMessage:
-            'Da luu toa nha va phong, nhung Firestore chua cap quyen ghi chats.',
-        fallbackMessage: 'Da luu toa nha va phong, nhung chua tao duoc chat.',
+            'Đã lưu tòa nhà và phòng, nhưng Firestore chưa cấp quyền ghi chats.',
+        fallbackMessage: 'Đã lưu tòa nhà và phòng, nhưng chưa tạo được chat.',
       );
     }
 
     return _settingsErrorMessage(
-      permissionMessage: 'Firestore chua cap quyen ghi buildings/rooms/chats.',
-      fallbackMessage: 'Khong luu duoc toa nha.',
+      permissionMessage: 'Firestore chưa cấp quyền ghi buildings/rooms/chats.',
+      fallbackMessage: 'Không lưu được tòa nhà.',
     );
   }
 
@@ -575,7 +576,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   void _openAdSettings() {
     final buildingId = _buildingId;
     if (buildingId == null || buildingId.isEmpty) {
-      _showSnack('Hay luu thiet lap toa nha truoc khi tao quang cao.');
+      _showSnack('Hãy lưu thiết lập tòa nhà trước khi tạo quảng cáo.');
       return;
     }
 
@@ -787,6 +788,77 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     );
   }
 
+  int _setupProgressPercent() {
+    final checks = [
+      _nameController.text.trim().isNotEmpty,
+      _provinceController.text.trim().isNotEmpty &&
+          _wardController.text.trim().isNotEmpty,
+      _readInt(_floorCountController) > 0 && _effectiveTotalRooms > 0,
+      _readInt(_defaultRentController) > 0,
+      _phoneController.text.trim().isNotEmpty ||
+          _emailController.text.trim().isNotEmpty,
+      _isPayosConfigured,
+      _rulesController.text.trim().isNotEmpty,
+    ];
+
+    final done = checks.where((value) => value).length;
+    return ((done / checks.length) * 100).round();
+  }
+
+  List<_SettingsTaskData> _settingsTasks() {
+    final tasks = <_SettingsTaskData>[];
+
+    if (_buildingId == null || _buildingId!.isEmpty) {
+      tasks.add(
+        _SettingsTaskData(
+          icon: Icons.save_outlined,
+          title: 'Lưu thiết lập tòa nhà',
+          subtitle: 'Cần lưu lần đầu để tạo tòa nhà và danh sách phòng.',
+          color: AppColors.primary,
+          onTap: () => _saveBuilding(),
+        ),
+      );
+    }
+
+    if (!_isPayosConfigured) {
+      tasks.add(
+        _SettingsTaskData(
+          icon: Icons.payments_outlined,
+          title: 'Cấu hình PayOS',
+          subtitle: 'Bật thanh toán tự động cho hóa đơn phòng.',
+          color: const Color(0xFFF59E0B),
+          onTap: _openPaymentSettings,
+        ),
+      );
+    }
+
+    if (_rulesController.text.trim().isEmpty) {
+      tasks.add(
+        _SettingsTaskData(
+          icon: Icons.article_outlined,
+          title: 'Bổ sung nội quy',
+          subtitle: 'Giúp người thuê nắm rõ quy định tòa nhà.',
+          color: AppColors.tenantAccent,
+          onTap: _openRulesSettings,
+        ),
+      );
+    }
+
+    if (tasks.length < 2) {
+      tasks.add(
+        _SettingsTaskData(
+          icon: Icons.campaign_outlined,
+          title: 'Kiểm tra quảng cáo',
+          subtitle: 'Cập nhật nội dung và ảnh phòng đang hiển trên Trang chủ.',
+          color: AppColors.managerAccent,
+          onTap: _openAdSettings,
+        ),
+      );
+    }
+
+    return tasks.take(2).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) return const Center(child: CircularProgressIndicator());
@@ -805,101 +877,573 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     final floorCount = _readInt(_floorCountController);
     final totalRooms = _effectiveTotalRooms;
 
+    final progress = _setupProgressPercent();
+    final tasks = _settingsTasks();
+    final statusLabel = progress >= 100 ? 'Sẵn sàng vận hành' : 'Cần cập nhật';
+
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
       children: [
         Text(
-          'Thiet lap toa nha',
-          style: Theme.of(
-            context,
-          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+          'Cài đặt',
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w900,
+              ),
         ),
         const SizedBox(height: 4),
-        Text(
-          'Da chia thanh cac muc nho de man hinh nhe hon va de tim lai thong tin.',
-          style: Theme.of(
-            context,
-          ).textTheme.bodyMedium?.copyWith(color: Colors.black54),
-        ),
-        const SizedBox(height: 16),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  buildingName.isEmpty ? 'Chua dat ten toa nha' : buildingName,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  area.isEmpty ? 'Chua chon khu vuc' : area,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(color: Colors.black54),
-                ),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    Chip(label: Text('$totalRooms phong')),
-                    Chip(label: Text('$floorCount tang')),
-                    Chip(
-                      label: Text(
-                        _isPayosConfigured
-                            ? 'PayOS da cau hinh'
-                            : 'PayOS chua cau hinh',
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+        const Text(
+          'Quản lý thiết lập và vận hành tòa nhà.',
+          style: TextStyle(
+            color: AppColors.textSecondary,
+            fontWeight: FontWeight.w600,
           ),
         ),
-        const SizedBox(height: 12),
-        AdminSettingsMenuTile(
-          icon: Icons.apartment_outlined,
-          title: 'Thong tin toa nha',
-          subtitle: 'Ten, lien he, tinh/xa va vi tri chinh xac tren map.',
-          onTap: _openBuildingInfoSettings,
+        const SizedBox(height: 16),
+        _SettingsOverviewCard(
+          buildingName: buildingName.isEmpty
+              ? 'Chưa đặt tên tòa nhà'
+              : buildingName,
+          area: area.isEmpty ? 'Chưa chọn khu vực' : area,
+          totalRooms: totalRooms,
+          floorCount: floorCount,
+          progress: progress,
+          statusLabel: statusLabel,
+          payosConfigured: _isPayosConfigured,
         ),
-        AdminSettingsMenuTile(
-          icon: Icons.meeting_room_outlined,
-          title: 'Phong va gia',
-          subtitle: 'So tang, so phong, tien thue va gia dich vu.',
-          onTap: _openRoomBillingSettings,
+        const SizedBox(height: 14),
+        _SettingsTasksCard(tasks: tasks),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Text(
+              'Nhóm cài đặt',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+            ),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: _isSaving ? null : () => _saveBuilding(),
+              icon: _isSaving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.save_outlined),
+              label: const Text('Lưu nhanh'),
+            ),
+          ],
         ),
-        AdminSettingsMenuTile(
-          icon: Icons.payments_outlined,
-          title: 'Thanh toan',
-          subtitle: 'Thong tin chuyen khoan va cau hinh PayOS cua toa nha.',
-          onTap: _openPaymentSettings,
-        ),
-        AdminSettingsMenuTile(
-          icon: Icons.campaign_outlined,
-          title: 'Thiet lap quang cao',
-          subtitle: 'Noi dung quang cao va anh phong hien tren trang chu.',
-          onTap: _openAdSettings,
-        ),
-        AdminSettingsMenuTile(
-          icon: Icons.verified_user_outlined,
-          title: 'Tien ich va quyen',
-          subtitle: 'Tien ich, xin vao toa nha, hien dia chi va gia phong.',
-          onTap: _openAccessDisplaySettings,
-        ),
-        AdminSettingsMenuTile(
-          icon: Icons.article_outlined,
-          title: 'Noi quy',
-          subtitle: 'Noi quy chung cua toa nha.',
-          onTap: _openRulesSettings,
+        const SizedBox(height: 10),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final columns = constraints.maxWidth >= 680 ? 3 : 2;
+            return GridView.count(
+              crossAxisCount: columns,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 1.03,
+              children: [
+                _SettingsModuleCard(
+                  icon: Icons.apartment_outlined,
+                  title: 'Thông tin',
+                  subtitle: 'Tên, liên hệ, vị trí',
+                  color: AppColors.primary,
+                  onTap: _openBuildingInfoSettings,
+                ),
+                _SettingsModuleCard(
+                  icon: Icons.meeting_room_outlined,
+                  title: 'Phòng & giá',
+                  subtitle: 'Số phòng, tiền thuê',
+                  color: AppColors.tenantAccent,
+                  onTap: _openRoomBillingSettings,
+                ),
+                _SettingsModuleCard(
+                  icon: Icons.payments_outlined,
+                  title: 'Thanh toán',
+                  subtitle: 'Ngân hàng, PayOS',
+                  color: const Color(0xFFF59E0B),
+                  onTap: _openPaymentSettings,
+                ),
+                _SettingsModuleCard(
+                  icon: Icons.campaign_outlined,
+                  title: 'Quảng cáo',
+                  subtitle: 'Nội dung và ảnh',
+                  color: AppColors.managerAccent,
+                  onTap: _openAdSettings,
+                ),
+                _SettingsModuleCard(
+                  icon: Icons.verified_user_outlined,
+                  title: 'Quyền & hiển thị',
+                  subtitle: 'Xin vào, Trang chủ, tiện ích',
+                  color: const Color(0xFF0EA5E9),
+                  onTap: _openAccessDisplaySettings,
+                ),
+                _SettingsModuleCard(
+                  icon: Icons.article_outlined,
+                  title: 'Nội quy',
+                  subtitle: 'Quy định tòa nhà',
+                  color: const Color(0xFFA855F7),
+                  onTap: _openRulesSettings,
+                ),
+              ],
+            );
+          },
         ),
       ],
     );
   }
 
+}
+
+class _SettingsTaskData {
+  const _SettingsTaskData({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+}
+
+class _SettingsOverviewCard extends StatelessWidget {
+  const _SettingsOverviewCard({
+    required this.buildingName,
+    required this.area,
+    required this.totalRooms,
+    required this.floorCount,
+    required this.progress,
+    required this.statusLabel,
+    required this.payosConfigured,
+  });
+
+  final String buildingName;
+  final String area;
+  final int totalRooms;
+  final int floorCount;
+  final int progress;
+  final String statusLabel;
+  final bool payosConfigured;
+
+  @override
+  Widget build(BuildContext context) {
+    final statusColor =
+        progress >= 100 ? AppColors.managerAccent : const Color(0xFFF59E0B);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: AppTheme.primaryGradient(),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.18),
+            blurRadius: 24,
+            offset: const Offset(0, 14),
+          ),
+        ],
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            right: -28,
+            top: -30,
+            child: Icon(
+              Icons.settings_rounded,
+              color: Colors.white.withValues(alpha: 0.12),
+              size: 148,
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          buildingName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w900,
+                              ),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          area,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.24),
+                      ),
+                    ),
+                    child: Text(
+                      statusLabel,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.16),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '$progress% hoàn tất',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        const Text(
+                          'Tiến độ thiết lập',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 9),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(999),
+                      child: LinearProgressIndicator(
+                        value: progress.clamp(0, 100).toDouble() / 100,
+                        minHeight: 8,
+                        backgroundColor: Colors.white.withValues(alpha: 0.22),
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _SettingsOverviewChip(label: '$totalRooms phòng'),
+                  _SettingsOverviewChip(label: '$floorCount tầng'),
+                  _SettingsOverviewChip(
+                    label: payosConfigured
+                        ? 'PayOS Đã cấu hình'
+                        : 'PayOS chưa cấu hình',
+                    color: payosConfigured
+                        ? AppColors.managerAccent
+                        : const Color(0xFFF59E0B),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsOverviewChip extends StatelessWidget {
+  const _SettingsOverviewChip({
+    required this.label,
+    this.color,
+  });
+
+  final String label;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: (color ?? Colors.white).withValues(
+          alpha: color == null ? 0.16 : 0.20,
+        ),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsTasksCard extends StatelessWidget {
+  const _SettingsTasksCard({required this.tasks});
+
+  final List<_SettingsTaskData> tasks;
+
+  @override
+  Widget build(BuildContext context) {
+    if (tasks.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.check_circle_outline, color: AppColors.managerAccent),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Tòa nhà đã sẵn sàng vận hành.',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.05),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: AppColors.primarySoft,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  Icons.task_alt_rounded,
+                  color: AppColors.primary,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'Việc cần làm',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          for (var i = 0; i < tasks.length; i++) ...[
+            _SettingsTaskTile(task: tasks[i]),
+            if (i != tasks.length - 1) const SizedBox(height: 10),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsTaskTile extends StatelessWidget {
+  const _SettingsTaskTile({required this.task});
+
+  final _SettingsTaskData task;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: task.color.withValues(alpha: 0.07),
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: task.onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: task.color.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(task.icon, color: task.color, size: 21),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      task.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      task.subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(Icons.chevron_right, color: task.color),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsModuleCard extends StatelessWidget {
+  const _SettingsModuleCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(24),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: AppColors.border),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.05),
+                blurRadius: 16,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Icon(icon, color: color),
+                  ),
+                  const Spacer(),
+                  Icon(Icons.arrow_forward_rounded, color: color, size: 20),
+                ],
+              ),
+              const Spacer(),
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                subtitle,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                  height: 1.25,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

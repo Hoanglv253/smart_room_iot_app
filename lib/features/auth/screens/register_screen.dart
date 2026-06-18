@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../../../core/services/app_firestore_service.dart';
 import '../../../core/widgets/auth_shell.dart';
@@ -60,15 +60,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
       builder: (context, _) {
         return AuthShell(
           showBackButton: true,
-          title: 'Dang ky tai khoan',
-          subtitle: 'Tao tai khoan moi',
+          title: 'Đăng ký tài khoản',
+          subtitle: 'Tạo tài khoản mới',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               TextField(
                 controller: _nameController,
                 decoration: const InputDecoration(
-                  labelText: 'Ho va ten',
+                  labelText: 'Họ và tên',
                   prefixIcon: Icon(Icons.person_outline),
                 ),
               ),
@@ -86,7 +86,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 controller: _passwordController,
                 obscureText: _viewModel.obscurePassword,
                 decoration: InputDecoration(
-                  labelText: 'Mat khau',
+                  labelText: 'Mật khẩu',
                   prefixIcon: const Icon(Icons.lock_outline),
                   suffixIcon: IconButton(
                     icon: Icon(
@@ -103,7 +103,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 controller: _confirmPasswordController,
                 obscureText: _viewModel.obscurePassword,
                 decoration: const InputDecoration(
-                  labelText: 'Xac nhan mat khau',
+                  labelText: 'Xác nhận mật khẩu',
                   prefixIcon: Icon(Icons.lock_reset),
                 ),
               ),
@@ -111,7 +111,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               DropdownButtonFormField<String>(
                 initialValue: _viewModel.selectedRole,
                 decoration: const InputDecoration(
-                  labelText: 'Chon vai tro',
+                  labelText: 'Chọn vai trò',
                   prefixIcon: Icon(Icons.admin_panel_settings_outlined),
                 ),
                 items: const [
@@ -142,14 +142,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         height: 22,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Dang ky'),
+                    : const Text('Đăng ký'),
               ),
               const SizedBox(height: 10),
               TextButton(
                 onPressed: _viewModel.isLoading
                     ? null
                     : () => Navigator.of(context).pop(),
-                child: const Text('Da co tai khoan? Dang nhap'),
+                child: const Text('Đã có tài khoản? Đăng nhập'),
               ),
             ],
           ),

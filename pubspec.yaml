@@ -14,6 +14,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   firebase_auth: any
   firebase_core: any
+  firebase_storage: any
   geocoding: ^4.0.0
   geolocator: ^14.0.2
   google_maps_flutter: any

@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../core/services/app_firestore_service.dart';
 import '../view_models/profile_view_model.dart';
@@ -33,6 +34,7 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final _viewModel = ProfileViewModel();
+  final _imagePicker = ImagePicker();
 
   String get _targetUserId => widget.profileUserId ?? widget.user.uid;
   bool get _isOwnProfile => _targetUserId == widget.user.uid;
@@ -229,36 +231,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
       text: _text(profile['address']),
     );
     final bioController = TextEditingController(text: _text(profile['bio']));
-    final avatarController = TextEditingController(
-      text: _avatarUrl(profile, widget.user, true),
+    final avatarUrlNotifier = ValueNotifier<String>(
+      _avatarUrl(profile, widget.user, true),
     );
+    var sheetOpen = true;
 
-    final saved = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
-      builder: (sheetContext) {
-        return AnimatedBuilder(
-          animation: _viewModel,
-          builder: (context, _) {
-            return Padding(
-              padding: EdgeInsets.only(
-                left: 18,
-                right: 18,
-                top: 18,
-                bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 18,
-              ),
-              child: Form(
-                key: formKey,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
+    bool? saved;
+    try {
+      saved = await showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        ),
+        builder: (_) {
+          return AnimatedBuilder(
+            animation: _viewModel,
+            builder: (context, _) {
+              return Padding(
+                padding: EdgeInsets.only(
+                  left: 18,
+                  right: 18,
+                  top: 18,
+                  bottom: MediaQuery.viewInsetsOf(context).bottom + 18,
+                ),
+                child: Form(
+                  key: formKey,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
                       Row(
                         children: [
                           const Expanded(
@@ -274,7 +279,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             tooltip: 'Đóng',
                             onPressed: _viewModel.isLoading
                                 ? null
-                                : () => Navigator.of(sheetContext).pop(false),
+                                : () => Navigator.of(context).pop(false),
                             icon: const Icon(Icons.close),
                           ),
                         ],
@@ -317,15 +322,76 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      TextFormField(
-                        controller: avatarController,
-                        keyboardType: TextInputType.url,
-                        textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(
-                          labelText: 'Link ảnh đại diện',
-                          prefixIcon: Icon(Icons.image_outlined),
-                          border: OutlineInputBorder(),
-                        ),
+                      ValueListenableBuilder<String>(
+                        valueListenable: avatarUrlNotifier,
+                        builder: (context, avatarUrl, _) {
+                          return _AvatarPickerCard(
+                            avatarUrl: avatarUrl,
+                            fallbackText: widget.avatarText,
+                            fallbackColor: widget.avatarColor,
+                            fallbackTextColor: widget.avatarTextColor,
+                            isLoading: _viewModel.isLoading,
+                            onPick: _viewModel.isLoading
+                                ? null
+                                : () async {
+                                    final messenger =
+                                        ScaffoldMessenger.of(context);
+                                    XFile? pickedImage;
+                                    try {
+                                      pickedImage =
+                                          await _imagePicker.pickImage(
+                                        source: ImageSource.gallery,
+                                        imageQuality: 85,
+                                        maxWidth: 1200,
+                                      );
+                                    } catch (error) {
+                                      if (!mounted || !sheetOpen) return;
+                                      messenger.showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            _profileImageErrorMessage(
+                                              error.toString(),
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                      return;
+                                    }
+                                    if (pickedImage == null) return;
+
+                                    final uploadedUrl =
+                                        await _viewModel.uploadAvatarImage(
+                                      user: widget.user,
+                                      image: pickedImage,
+                                    );
+
+                                    if (!mounted || !sheetOpen) return;
+                                    if (uploadedUrl != null &&
+                                        uploadedUrl.trim().isNotEmpty) {
+                                      avatarUrlNotifier.value = uploadedUrl;
+                                      messenger.showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Đã tải Ảnh đại diện.'),
+                                        ),
+                                      );
+                                      return;
+                                    }
+
+                                    messenger.showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          _profileImageErrorMessage(
+                                            _viewModel.errorMessage,
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                            onRemove: avatarUrl.isEmpty || _viewModel.isLoading
+                                ? null
+                                : () => avatarUrlNotifier.value = '',
+                          );
+                        },
                       ),
                       const SizedBox(height: 12),
                       TextFormField(
@@ -344,6 +410,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         onPressed: _viewModel.isLoading
                             ? null
                             : () async {
+                                final navigator = Navigator.of(context);
+                                final messenger =
+                                    ScaffoldMessenger.of(context);
                                 if (!(formKey.currentState?.validate() ??
                                     false)) {
                                   return;
@@ -355,16 +424,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   phone: phoneController.text,
                                   bio: bioController.text,
                                   address: addressController.text,
-                                  avatarUrl: avatarController.text,
+                                  avatarUrl: avatarUrlNotifier.value,
                                 );
 
-                                if (!sheetContext.mounted) return;
+                                if (!mounted || !sheetOpen) return;
                                 if (ok) {
-                                  Navigator.of(sheetContext).pop(true);
+                                  navigator.pop(true);
                                   return;
                                 }
 
-                                ScaffoldMessenger.of(sheetContext).showSnackBar(
+                                messenger.showSnackBar(
                                   SnackBar(
                                     content: Text(
                                       _viewModel.errorMessage ??
@@ -382,21 +451,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             : const Icon(Icons.save_outlined),
                         label: const Text('Lưu hồ sơ'),
                       ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            );
-          },
-        );
-      },
-    );
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      sheetOpen = false;
+    }
 
     nameController.dispose();
     phoneController.dispose();
     addressController.dispose();
     bioController.dispose();
-    avatarController.dispose();
+    avatarUrlNotifier.dispose();
 
     if (!mounted || saved != true) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -679,6 +751,115 @@ class _InfoTile extends StatelessWidget {
   }
 }
 
+class _AvatarPickerCard extends StatelessWidget {
+  const _AvatarPickerCard({
+    required this.avatarUrl,
+    required this.fallbackText,
+    required this.fallbackColor,
+    required this.fallbackTextColor,
+    required this.isLoading,
+    required this.onPick,
+    required this.onRemove,
+  });
+
+  final String avatarUrl;
+  final String fallbackText;
+  final Color fallbackColor;
+  final Color fallbackTextColor;
+  final bool isLoading;
+  final VoidCallback? onPick;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FBFF),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFDDE6FB)),
+      ),
+      child: Row(
+        children: [
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              _SafeAvatarImage(
+                radius: 34,
+                avatarUrl: avatarUrl,
+                fallbackText: fallbackText,
+                backgroundColor: fallbackColor,
+                textColor: fallbackTextColor,
+              ),
+              if (isLoading)
+                Container(
+                  width: 68,
+                  height: 68,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.28),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Center(
+                    child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Ảnh đại diện',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 15,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Chọn ảnh từ thư viện của điện thoại.',
+                  style: TextStyle(
+                    color: Color(0xFF64748B),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: onPick,
+                      icon: const Icon(Icons.photo_library_outlined, size: 18),
+                      label: const Text('Chọn ảnh'),
+                    ),
+                    if (avatarUrl.isNotEmpty)
+                      TextButton.icon(
+                        onPressed: onRemove,
+                        icon: const Icon(Icons.delete_outline, size: 18),
+                        label: const Text('Xóa'),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ProfileAvatar extends StatelessWidget {
   const _ProfileAvatar({
     required this.profile,
@@ -702,23 +883,86 @@ class _ProfileAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final avatarUrl = _avatarUrl(profile, user, isOwnProfile);
 
-    return CircleAvatar(
-      radius: radius,
-      backgroundColor: Colors.white,
-      child: CircleAvatar(
+    return Container(
+      width: radius * 2,
+      height: radius * 2,
+      padding: const EdgeInsets.all(3),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+      ),
+      child: _SafeAvatarImage(
         radius: radius - 3,
+        avatarUrl: avatarUrl,
+        fallbackText: fallbackText,
         backgroundColor: fallbackColor,
-        backgroundImage: avatarUrl.isEmpty ? null : NetworkImage(avatarUrl),
-        child: avatarUrl.isEmpty
-            ? Text(
-                fallbackText,
-                style: TextStyle(
-                  color: fallbackTextColor,
-                  fontSize: radius * 0.42,
-                  fontWeight: FontWeight.bold,
-                ),
-              )
-            : null,
+        textColor: fallbackTextColor,
+      ),
+    );
+  }
+}
+
+class _SafeAvatarImage extends StatelessWidget {
+  const _SafeAvatarImage({
+    required this.radius,
+    required this.avatarUrl,
+    required this.fallbackText,
+    required this.backgroundColor,
+    required this.textColor,
+  });
+
+  final double radius;
+  final String avatarUrl;
+  final String fallbackText;
+  final Color backgroundColor;
+  final Color textColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = radius * 2;
+    final cleanUrl = avatarUrl.trim();
+
+    return ClipOval(
+      child: Container(
+        width: size,
+        height: size,
+        color: backgroundColor,
+        child: cleanUrl.isEmpty
+            ? _fallback()
+            : Image.network(
+                cleanUrl,
+                width: size,
+                height: size,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => _fallback(),
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      _fallback(),
+                      const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ],
+                  );
+                },
+              ),
+      ),
+    );
+  }
+
+  Widget _fallback() {
+    return Center(
+      child: Text(
+        fallbackText,
+        style: TextStyle(
+          color: textColor,
+          fontSize: radius * 0.52,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }
@@ -846,6 +1090,25 @@ String _avatarUrl(
   if (url.isNotEmpty) return url;
   if (!isOwnProfile) return '';
   return user.photoURL?.trim() ?? '';
+}
+
+String _profileImageErrorMessage(String? errorMessage) {
+  final error = errorMessage ?? '';
+  if (error.contains('MissingPluginException')) {
+    return 'Cần dừng app và chạy lại từ đầu sau khi thêm image_picker.';
+  }
+  if (error.contains('firebase_storage/unauthorized') ||
+      error.contains('permission-denied') ||
+      error.contains('unauthorized')) {
+    return 'Firebase Storage chưa cấp quyền upload Ảnh đại diện.';
+  }
+  if (error.contains('object-not-found')) {
+    return 'Firebase Storage chưa trả về link ảnh. Thử lại sau vài giây.';
+  }
+  if (error.contains('TimeoutException')) {
+    return 'Kết nối Firebase Storage quá lâu. Kiểm tra mạng rồi thử lại.';
+  }
+  return 'Không xử lý được Ảnh đại diện.';
 }
 
 String _roleKey(Map<String, dynamic> profile, String roleLabel) {

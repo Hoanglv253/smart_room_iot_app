@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_theme.dart';
 import 'admin_settings_widgets.dart';
 
 class AdminBuildingInfoSettingsScreen extends StatefulWidget {
@@ -64,19 +65,57 @@ class _AdminBuildingInfoSettingsScreenState
 
   @override
   Widget build(BuildContext context) {
+    final buildingName = widget.nameController.text.trim().isEmpty
+        ? 'Tên tòa nhà'
+        : widget.nameController.text.trim();
+    final area = [
+      widget.wardController.text.trim(),
+      widget.provinceController.text.trim(),
+    ].where((part) => part.isNotEmpty).join(', ');
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Thong tin toa nha')),
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+        title: const Text(
+          'Thông tin tòa nhà',
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          AdminSettingsHeroCard(
+            icon: Icons.apartment_outlined,
+            title: buildingName,
+            subtitle: area.isEmpty
+                ? 'Hoàn thiện tên, địa chỉ và liên hệ để hiển thị trên Trang chủ.'
+                : area,
+            metrics: [
+              AdminSettingsHeroPill(
+                icon: Icons.place_outlined,
+                label: _coordinateLabel(_location),
+              ),
+              AdminSettingsHeroPill(
+                icon: Icons.call_outlined,
+                label: widget.phoneController.text.trim().isEmpty
+                    ? 'Chưa có SĐT'
+                    : widget.phoneController.text.trim(),
+              ),
+            ],
+          ),
           AdminSettingsSection(
-            title: 'Thong tin chung',
+            title: 'Thông tin chung',
             subtitle:
-                'Ten, lien he va dia chi nay duoc dung cho quang cao, tim kiem va hoa don.',
+                'Tên, liên hệ và địa chỉ này được dùng cho quảng cáo, tìm kiếm và hóa đơn.',
+            icon: Icons.edit_location_alt_outlined,
+            color: AppColors.primary,
             children: [
               AdminSettingsTextField(
                 controller: widget.nameController,
-                label: 'Ten toa nha',
+                label: 'Tên tòa nhà',
+                onChanged: (_) => setState(() {}),
               ),
               AdminProvinceDropdown(
                 controller: widget.provinceController,
@@ -84,15 +123,15 @@ class _AdminBuildingInfoSettingsScreenState
               ),
               AdminSettingsTextField(
                 controller: widget.wardController,
-                label: 'Xa/phuong',
-                helperText: 'Dung cho bo loc khu vuc va dia chi moi.',
+                label: 'Xã/phường',
+                helperText: 'Dùng cho bộ lọc khu vực và địa chỉ mới.',
                 onChanged: (_) => _syncLocationFields(),
               ),
               AdminSettingsTextField(
                 controller: widget.addressController,
-                label: 'Dia chi chi tiet',
+                label: 'Địa chỉ chi tiết',
                 helperText:
-                    'So nha, ten duong; sau do chon vi tri chinh xac tren map.',
+                    'Số nhà, tên đường; sau đó chọn vị trí chính xác trên map.',
                 onChanged: (_) => _syncLocationFields(),
               ),
               AdminLocationPickerButton(
@@ -101,17 +140,18 @@ class _AdminBuildingInfoSettingsScreenState
               ),
               AdminSettingsTextField(
                 controller: widget.descriptionController,
-                label: 'Mo ta ngan',
+                label: 'Mô tả ngan',
                 maxLines: 3,
               ),
               AdminSettingsTextField(
                 controller: widget.phoneController,
-                label: 'So dien thoai lien he',
+                label: 'Số điện thoại liên hệ',
                 keyboardType: TextInputType.phone,
+                onChanged: (_) => setState(() {}),
               ),
               AdminSettingsTextField(
                 controller: widget.emailController,
-                label: 'Email lien he',
+                label: 'Email liên hệ',
                 keyboardType: TextInputType.emailAddress,
               ),
             ],
@@ -119,10 +159,17 @@ class _AdminBuildingInfoSettingsScreenState
           AdminSettingsAsyncButton(
             onPressed: widget.onSave,
             icon: Icons.save_outlined,
-            label: 'Luu thong tin toa nha',
+            label: 'Lưu thông tin tòa nhà',
           ),
         ],
       ),
     );
+  }
+
+  static String _coordinateLabel(Map<String, dynamic> location) {
+    final lat = location['lat'];
+    final lng = location['lng'];
+    if (lat == null || lng == null) return 'Chưa chọn map';
+    return 'Đã chọn bản đồ';
   }
 }

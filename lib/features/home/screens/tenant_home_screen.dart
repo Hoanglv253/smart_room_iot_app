@@ -1,4 +1,4 @@
-﻿import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/services/app_firestore_service.dart';
@@ -29,10 +29,10 @@ class _TenantHomeScreenState extends State<TenantHomeScreen> {
   final _viewModel = RoleHomeViewModel();
 
   static const _items = <RoleNavItem>[
-    RoleNavItem(icon: Icons.dynamic_feed_outlined, label: 'Feed'),
-    RoleNavItem(icon: Icons.meeting_room_outlined, label: 'Phong cua toi'),
-    RoleNavItem(icon: Icons.chat_bubble_outline, label: 'Tin nhan'),
-    RoleNavItem(icon: Icons.settings_outlined, label: 'Cai dat'),
+    RoleNavItem(icon: Icons.dynamic_feed_outlined, label: 'Trang chủ'),
+    RoleNavItem(icon: Icons.meeting_room_outlined, label: 'Phòng của tôi'),
+    RoleNavItem(icon: Icons.chat_bubble_outline, label: 'Tin nhắn'),
+    RoleNavItem(icon: Icons.settings_outlined, label: 'Cài đặt'),
   ];
 
   @override
@@ -47,7 +47,11 @@ class _TenantHomeScreenState extends State<TenantHomeScreen> {
       FeedScreen(user: widget.user, role: UserRole.user),
       TenantRoomScreen(user: widget.user),
       MessagesScreen(user: widget.user),
-      BasicSettingsScreen(user: widget.user),
+      BasicSettingsScreen(
+        user: widget.user,
+        role: UserRole.user,
+        onLogout: widget.onLogout,
+      ),
     ];
 
     return AnimatedBuilder(

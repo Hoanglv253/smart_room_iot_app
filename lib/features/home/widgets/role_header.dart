@@ -1,4 +1,4 @@
-﻿import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../profile/screens/profile_screen.dart';
@@ -70,7 +70,7 @@ class RoleHeader extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    'Xin chao, $_displayName',
+                    'Xin chào, $_displayName',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(

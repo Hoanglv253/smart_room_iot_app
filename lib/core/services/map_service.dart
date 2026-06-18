@@ -81,7 +81,7 @@ class _ProvinceSearchHint {
     if (!hasCenter) return null;
     return MapLocationResult(
       address: originalAddress,
-      formattedAddress: '$name, Viet Nam',
+      formattedAddress: '$name, Việt Nam',
       latitude: centerLat!,
       longitude: centerLng!,
       placeId: '',
@@ -108,7 +108,7 @@ class MapService {
 
   static const _provinceSearchHints = <_ProvinceSearchHint>[
     _ProvinceSearchHint(
-      name: 'Da Nang',
+      name: 'Đà Nẵng',
       centerLat: 16.0471,
       centerLng: 108.2068,
       minLat: 15.75,
@@ -213,7 +213,7 @@ class MapService {
           .timeout(
             const Duration(seconds: 10),
             onTimeout: () {
-              throw TimeoutException('Google Maps geocoding qua lau.');
+              throw TimeoutException('Google Maps geocoding quá lâu.');
             },
           );
 
@@ -350,15 +350,15 @@ class MapService {
   static List<String> _addressQueries(String address) {
     final normalized = _normalize(address);
     final provinceHint = _provinceHintForAddress(address);
-    final queries = <String>[address, '$address, Viet Nam'];
+    final queries = <String>[address, '$address, Việt Nam'];
 
     if (provinceHint != null) {
-      queries.insert(0, '${provinceHint.name}, Viet Nam');
-      queries.insert(0, '$address, ${provinceHint.name}, Viet Nam');
+      queries.insert(0, '${provinceHint.name}, Việt Nam');
+      queries.insert(0, '$address, ${provinceHint.name}, Việt Nam');
     }
 
     if (normalized.contains('ngu hanh son')) {
-      queries.insert(0, 'Ngu Hanh Son, Da Nang, Viet Nam');
+      queries.insert(0, 'Ngũ Hành Sơn, Đà Nẵng, Việt Nam');
     }
 
     return queries.toSet().toList();

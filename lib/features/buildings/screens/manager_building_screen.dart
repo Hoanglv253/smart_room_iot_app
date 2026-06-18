@@ -2,10 +2,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import 'admin_room_management_screen.dart';
-import 'admin_invoice_management_screen.dart';
-import 'admin_user_management_screen.dart';
+import '../../../core/services/app_firestore_service.dart';
+import '../../notifications/screens/notifications_screen.dart';
 import '../view_models/manager_building_view_model.dart';
+import '../widgets/building_dashboard_widgets.dart';
+import 'admin_invoice_management_screen.dart';
+import 'admin_room_management_screen.dart';
+import 'admin_user_management_screen.dart';
 
 class ManagerBuildingScreen extends StatefulWidget {
   const ManagerBuildingScreen({required this.user, super.key});
@@ -53,29 +56,11 @@ class _ManagerBuildingScreenState extends State<ManagerBuildingScreen> {
             }
 
             final building = buildingSnapshot.data!.data() ?? {};
-            return ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                Text(
-                  (building['name'] ?? 'Tòa nhà của tôi').toString(),
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                const SizedBox(height: 4),
-                Text((building['address'] ?? 'Chưa có địa chỉ').toString()),
-                const SizedBox(height: 16),
-                _ManagerBuildingStats(
-                  buildingId: buildingId,
-                  building: building,
-                  viewModel: _viewModel,
-                ),
-                const SizedBox(height: 16),
-                _ManagerActionGrid(
-                  buildingId: buildingId,
-                  building: building,
-                ),
-              ],
+            return _ManagerBuildingDashboard(
+              user: widget.user,
+              buildingId: buildingId,
+              building: building,
+              viewModel: _viewModel,
             );
           },
         );
@@ -84,260 +69,136 @@ class _ManagerBuildingScreenState extends State<ManagerBuildingScreen> {
   }
 }
 
-class _ManagerBuildingStats extends StatelessWidget {
-  const _ManagerBuildingStats({
+class _ManagerBuildingDashboard extends StatelessWidget {
+  const _ManagerBuildingDashboard({
+    required this.user,
     required this.buildingId,
     required this.building,
     required this.viewModel,
   });
 
+  final User user;
   final String buildingId;
   final Map<String, dynamic> building;
   final ManagerBuildingViewModel viewModel;
 
   @override
   Widget build(BuildContext context) {
-    final totalRooms = (building['totalRooms'] as num?)?.toInt() ?? 0;
-
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: viewModel.members(buildingId),
-      builder: (context, snapshot) {
-        final tenantCount = viewModel.tenantCount(snapshot.data?.docs ?? []);
-        final occupiedRooms = tenantCount.clamp(0, totalRooms).toInt();
-        final emptyRooms = (totalRooms - occupiedRooms)
-            .clamp(0, totalRooms)
-            .toInt();
-
-        return Row(
-          children: [
-            Expanded(
-              child: _ManagerStatCard(
-                title: 'Tổng người thuê',
-                value: '$tenantCount',
-                icon: Icons.groups_outlined,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _ManagerRoomPieCard(
-                totalRooms: totalRooms,
-                occupiedRooms: occupiedRooms,
-                emptyRooms: emptyRooms,
-              ),
-            ),
-          ],
+      stream: viewModel.rooms(buildingId),
+      builder: (context, roomSnapshot) {
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: viewModel.members(buildingId),
+          builder: (context, memberSnapshot) {
+            return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: viewModel.invoices(buildingId),
+              builder: (context, invoiceSnapshot) {
+                final members = memberSnapshot.data?.docs ?? [];
+                return BuildingDashboardContent(
+                  building: building,
+                  rooms: roomSnapshot.data?.docs ?? [],
+                  tenantCount: viewModel.tenantCount(members),
+                  pendingRequestCount: 0,
+                  pendingInvoiceCount:
+                      _pendingInvoiceCount(invoiceSnapshot.data?.docs ?? []),
+                  actions: _actions(context),
+                );
+              },
+            );
+          },
         );
       },
     );
   }
-}
 
-class _ManagerStatCard extends StatelessWidget {
-  const _ManagerStatCard({
-    required this.title,
-    required this.value,
-    required this.icon,
-  });
+  List<BuildingDashboardAction> _actions(BuildContext context) {
+    return [
+      BuildingDashboardAction(
+        icon: Icons.meeting_room_outlined,
+        label: 'Phòng',
+        subtitle: 'Xem số do và trạng thái',
+        onTap: () => _openRooms(context),
+      ),
+      BuildingDashboardAction(
+        icon: Icons.people_outline,
+        label: 'Người thuê',
+        subtitle: 'Danh sách thành viên',
+        color: const Color(0xFF16A34A),
+        onTap: () => _openUsers(context),
+      ),
+      BuildingDashboardAction(
+        icon: Icons.receipt_long_outlined,
+        label: 'Hóa đơn',
+        subtitle: 'Theo dõi thanh toán',
+        color: const Color(0xFFF59E0B),
+        onTap: () => _openInvoices(context),
+      ),
+      BuildingDashboardAction(
+        icon: Icons.notifications_active_outlined,
+        label: 'Thông báo',
+        subtitle: 'Gửi và theo dõi',
+        color: const Color(0xFF7C3AED),
+        onTap: () => _openNotifications(context),
+      ),
+    ];
+  }
 
-  final String title;
-  final String value;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 1,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Icon(icon, color: Colors.blueAccent, size: 32),
-            const SizedBox(height: 12),
-            Text(
-              value,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            const SizedBox(height: 4),
-            Text(title, textAlign: TextAlign.center),
-          ],
+  void _openRooms(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AdminRoomManagementScreen(
+          buildingId: buildingId,
+          building: building,
+          canEditRoom: false,
+          canManageTenant: false,
         ),
       ),
     );
   }
-}
 
-class _ManagerRoomPieCard extends StatelessWidget {
-  const _ManagerRoomPieCard({
-    required this.totalRooms,
-    required this.occupiedRooms,
-    required this.emptyRooms,
-  });
-
-  final int totalRooms;
-  final int occupiedRooms;
-  final int emptyRooms;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 1,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            SizedBox(
-              width: 68,
-              height: 68,
-              child: CustomPaint(
-                painter: _ManagerRoomPiePainter(
-                  occupied: occupiedRooms,
-                  empty: emptyRooms,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              '$totalRooms phòng',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            Text('Trống: $emptyRooms | Đã thuê: $occupiedRooms'),
-          ],
+  void _openUsers(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AdminUserManagementScreen(
+          buildingId: buildingId,
+          buildingName: (building['name'] ?? 'tòa nhà').toString(),
         ),
       ),
     );
   }
-}
 
-class _ManagerRoomPiePainter extends CustomPainter {
-  const _ManagerRoomPiePainter({
-    required this.occupied,
-    required this.empty,
-  });
-
-  final int occupied;
-  final int empty;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final total = occupied + empty;
-    final rect = Offset.zero & size;
-    final occupiedPaint = Paint()..color = Colors.blueAccent;
-    final emptyPaint = Paint()..color = const Color(0xFFBDBDBD);
-
-    if (total == 0) {
-      canvas.drawArc(rect, 0, 6.283, true, emptyPaint);
-      return;
-    }
-
-    final occupiedSweep = (occupied / total) * 6.283;
-    canvas.drawArc(rect, -1.5708, occupiedSweep, true, occupiedPaint);
-    canvas.drawArc(
-      rect,
-      -1.5708 + occupiedSweep,
-      6.283 - occupiedSweep,
-      true,
-      emptyPaint,
+  void _openInvoices(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AdminInvoiceManagementScreen(
+          buildingId: buildingId,
+          building: building,
+          canCreate: false,
+          canConfirmPayment: false,
+        ),
+      ),
     );
   }
 
-  @override
-  bool shouldRepaint(covariant _ManagerRoomPiePainter oldDelegate) {
-    return oldDelegate.occupied != occupied || oldDelegate.empty != empty;
-  }
-}
-
-class _ManagerActionGrid extends StatelessWidget {
-  const _ManagerActionGrid({
-    required this.buildingId,
-    required this.building,
-  });
-
-  final String buildingId;
-  final Map<String, dynamic> building;
-
-  static const _actions = [
-    _ManagerAction('building', Icons.apartment_outlined, 'Quản lý tòa nhà'),
-    _ManagerAction('users', Icons.people_outline, 'Quản lý người dùng'),
-    _ManagerAction('bills', Icons.receipt_long_outlined, 'Hóa đơn'),
-    _ManagerAction('emergency', Icons.emergency_outlined, 'Khẩn cấp'),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      childAspectRatio: 1.5,
-      children: _actions.map((action) {
-        return Card(
-          elevation: 1,
-          child: InkWell(
-            onTap: () => _handleActionTap(context, action.id),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(action.icon, color: Colors.blueAccent),
-                const SizedBox(height: 8),
-                Text(action.label, textAlign: TextAlign.center),
-              ],
-            ),
-          ),
-        );
-      }).toList(),
+  void _openNotifications(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => NotificationsScreen(
+          user: user,
+          role: UserRole.manager,
+          buildingId: buildingId,
+          buildingName: (building['name'] ?? 'Tòa nhà').toString(),
+        ),
+      ),
     );
   }
 
-  void _handleActionTap(BuildContext context, String actionId) {
-    if (actionId == 'building') {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => AdminRoomManagementScreen(
-            buildingId: buildingId,
-            building: building,
-            canEditRoom: false,
-            canManageTenant: false,
-          ),
-        ),
-      );
-      return;
-    }
-
-    if (actionId == 'users') {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => AdminUserManagementScreen(
-            buildingId: buildingId,
-            buildingName: (building['name'] ?? 'tòa nhà').toString(),
-          ),
-        ),
-      );
-      return;
-    }
-
-    if (actionId == 'bills') {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => AdminInvoiceManagementScreen(
-            buildingId: buildingId,
-            building: building,
-            canCreate: false,
-            canConfirmPayment: false,
-          ),
-        ),
-      );
-    }
+  static int _pendingInvoiceCount(
+    Iterable<QueryDocumentSnapshot<Map<String, dynamic>>> invoices,
+  ) {
+    return invoices.where((doc) {
+      final status = (doc.data()['status'] ?? InvoiceStatus.unpaid).toString();
+      return status == InvoiceStatus.pending;
+    }).length;
   }
-}
-
-class _ManagerAction {
-  const _ManagerAction(this.id, this.icon, this.label);
-
-  final String id;
-  final IconData icon;
-  final String label;
 }

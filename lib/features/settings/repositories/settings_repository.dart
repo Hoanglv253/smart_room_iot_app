@@ -2,19 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/services/app_firestore_service.dart';
 
 class SettingsRepository {
-  static const _cloudinaryCloudName = String.fromEnvironment(
-    'CLOUDINARY_CLOUD_NAME',
-  );
-  static const _cloudinaryUploadPreset = String.fromEnvironment(
-    'CLOUDINARY_UPLOAD_PRESET',
-  );
-
   Future<QuerySnapshot<Map<String, dynamic>>> adminBuilding(String adminId) {
     return AppFirestoreService.buildings
         .where('adminId', isEqualTo: adminId)
@@ -51,31 +46,58 @@ class SettingsRepository {
     });
   }
 
+  Future<List<String>> uploadRoomImages({
+    required String buildingId,
+    required String roomId,
+    required List<XFile> images,
+  }) async {
+    if (images.isEmpty) return const [];
+
+    final urls = <String>[];
+    for (final image in images) {
+      final url = await _uploadImageToFirebaseStorage(
+        buildingId: buildingId,
+        roomId: roomId,
+        image: image,
+      );
+      urls.add(url);
+    }
+
+    final roomRef = AppFirestoreService.buildingRooms(buildingId).doc(roomId);
+
+    try {
+      await AppFirestoreService.db.runTransaction((transaction) async {
+        final snapshot = await transaction.get(roomRef);
+        final room = snapshot.data() ?? {};
+        final currentCover = (room['coverImageUrl'] ?? '').toString().trim();
+
+        transaction.set(roomRef, {
+          'imageUrls': FieldValue.arrayUnion(urls),
+          if (currentCover.isEmpty) 'coverImageUrl': urls.first,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      });
+    } catch (_) {
+      for (final url in urls) {
+        await _deleteFirebaseStorageImage(url);
+      }
+      rethrow;
+    }
+
+    return urls;
+  }
+
   Future<String> uploadRoomImage({
     required String buildingId,
     required String roomId,
     required XFile image,
   }) async {
-    final url = await _uploadImageToCloudinary(
+    final urls = await uploadRoomImages(
       buildingId: buildingId,
       roomId: roomId,
-      image: image,
+      images: [image],
     );
-    final roomRef = AppFirestoreService.buildingRooms(buildingId).doc(roomId);
-
-    await AppFirestoreService.db.runTransaction((transaction) async {
-      final snapshot = await transaction.get(roomRef);
-      final room = snapshot.data() ?? {};
-      final currentCover = (room['coverImageUrl'] ?? '').toString().trim();
-
-      transaction.set(roomRef, {
-        'imageUrls': FieldValue.arrayUnion([url]),
-        if (currentCover.isEmpty) 'coverImageUrl': url,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-    });
-
-    return url;
+    return urls.first;
   }
 
   Future<void> setRoomCoverImage({
@@ -112,9 +134,7 @@ class SettingsRepository {
       });
     });
 
-    // Cloudinary unsigned uploads cannot be securely deleted from the client.
-    // The app removes the image from Firestore; cloud cleanup can be added later
-    // through a signed backend endpoint.
+    await _deleteFirebaseStorageImage(imageUrl);
   }
 
   Future<String> saveBuilding({
@@ -185,7 +205,7 @@ class SettingsRepository {
         'buildingId': buildingId,
         'roomNumber': index,
         'floor': floor,
-        'name': 'Phong $floor${roomInFloor.toString().padLeft(2, '0')}',
+        'name': 'Phòng $floor${roomInFloor.toString().padLeft(2, '0')}',
         'rent': defaultRent,
         'type': 'standard',
         'maxPeople': 0,
@@ -229,7 +249,7 @@ class SettingsRepository {
       'type': ChatType.group,
       'buildingId': buildingId,
       'ownerId': userId,
-      'title': buildingName.isEmpty ? 'Nhom chat toa nha' : buildingName,
+      'title': buildingName.isEmpty ? 'Nhóm chat tòa nhà' : buildingName,
       'memberIds': [userId],
       'deletedFor': [],
       'isDeleted': false,
@@ -255,14 +275,14 @@ class SettingsRepository {
         .timeout(
           const Duration(seconds: 15),
           onTimeout: () {
-            throw TimeoutException('Ket noi PayOS backend qua lau.');
+            throw TimeoutException('Kết nối PayOS backend quá lâu.');
           },
         );
 
     final data = _decodeMap(response.body);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(
-        data['message']?.toString() ?? 'Khong tai duoc cau hinh PayOS.',
+        data['message']?.toString() ?? 'Không tải được cấu hình PayOS.',
       );
     }
 
@@ -294,14 +314,14 @@ class SettingsRepository {
         .timeout(
           const Duration(seconds: 15),
           onTimeout: () {
-            throw TimeoutException('Ket noi PayOS backend qua lau.');
+            throw TimeoutException('Kết nối PayOS backend quá lâu.');
           },
         );
 
     final data = _decodeMap(response.body);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(
-        data['message']?.toString() ?? 'Khong luu duoc cau hinh PayOS.',
+        data['message']?.toString() ?? 'Không lưu được cấu hình PayOS.',
       );
     }
 
@@ -339,54 +359,85 @@ class SettingsRepository {
     return clean.isEmpty ? 'room_image.jpg' : clean;
   }
 
-  static Future<String> _uploadImageToCloudinary({
+  static Future<String> _uploadImageToFirebaseStorage({
     required String buildingId,
     required String roomId,
     required XFile image,
   }) async {
-    if (_cloudinaryCloudName.isEmpty || _cloudinaryUploadPreset.isEmpty) {
-      throw Exception(
-        'Chua cau hinh CLOUDINARY_CLOUD_NAME va CLOUDINARY_UPLOAD_PRESET.',
-      );
-    }
-
     final bytes = await image.readAsBytes();
     final fileName = _safeStorageFileName(image.name);
-    final request = http.MultipartRequest(
-      'POST',
-      Uri.https(
-        'api.cloudinary.com',
-        '/v1_1/$_cloudinaryCloudName/image/upload',
-      ),
-    )
-      ..fields['upload_preset'] = _cloudinaryUploadPreset
-      ..fields['folder'] = 'smart_room_iot/buildings/$buildingId/rooms/$roomId'
-      ..files.add(
-        http.MultipartFile.fromBytes(
-          'file',
-          bytes,
-          filename: fileName,
-        ),
-      );
+    final uploadedAt = DateTime.now().microsecondsSinceEpoch;
+    final ref = FirebaseStorage.instance
+        .ref()
+        .child('buildings')
+        .child(buildingId)
+        .child('rooms')
+        .child(roomId)
+        .child('${uploadedAt}_$fileName');
 
-    final streamedResponse = await request.send().timeout(
-      const Duration(seconds: 45),
+    final uploadTask = ref.putData(
+      bytes,
+      SettableMetadata(
+        contentType: _imageContentType(fileName),
+        customMetadata: {
+          'buildingId': buildingId,
+          'roomId': roomId,
+          'originalName': fileName,
+        },
+      ),
+    );
+
+    final snapshot = await uploadTask.timeout(
+      const Duration(seconds: 60),
       onTimeout: () {
-        throw TimeoutException('Ket noi Cloudinary qua lau.');
+        throw TimeoutException('Kết nối Firebase Storage quá lâu.');
       },
     );
-    final response = await http.Response.fromStream(streamedResponse);
 
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('Cloudinary upload failed: ${response.body}');
+    return _downloadUrlWithRetry(snapshot.ref);
+  }
+
+  static Future<void> _deleteFirebaseStorageImage(String imageUrl) async {
+    final trimmedUrl = imageUrl.trim();
+    if (trimmedUrl.isEmpty) return;
+
+    final isFirebaseUrl =
+        trimmedUrl.startsWith('gs://') ||
+        trimmedUrl.contains('firebasestorage.googleapis.com');
+    if (!isFirebaseUrl) return;
+
+    try {
+      await FirebaseStorage.instance.refFromURL(trimmedUrl).delete();
+    } on FirebaseException {
+      return;
+    } on ArgumentError {
+      return;
+    }
+  }
+
+  static Future<String> _downloadUrlWithRetry(Reference ref) async {
+    FirebaseException? lastError;
+
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        return await ref.getDownloadURL();
+      } on FirebaseException catch (error) {
+        lastError = error;
+        if (error.code != 'object-not-found') rethrow;
+        await Future<void>.delayed(const Duration(milliseconds: 350));
+      }
     }
 
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    final secureUrl = (data['secure_url'] ?? data['url'] ?? '').toString();
-    if (secureUrl.isEmpty) {
-      throw Exception('Cloudinary khong tra ve link anh.');
-    }
+    throw lastError ?? Exception('Không lấy được link ảnh Firebase Storage.');
+  }
 
-    return secureUrl;
+  static String _imageContentType(String fileName) {
+    final lowerName = fileName.toLowerCase();
+    if (lowerName.endsWith('.png')) return 'image/png';
+    if (lowerName.endsWith('.webp')) return 'image/webp';
+    if (lowerName.endsWith('.gif')) return 'image/gif';
+    if (lowerName.endsWith('.heic')) return 'image/heic';
+    if (lowerName.endsWith('.heif')) return 'image/heif';
+    return 'image/jpeg';
   }
 }

@@ -57,7 +57,7 @@ class RoleHomeShell extends StatelessWidget {
         ),
         actions: [
           IconButton(
-            tooltip: 'Dang xuat',
+            tooltip: 'Đăng xuất',
             icon: const Icon(Icons.logout_rounded),
             onPressed: onLogout,
           ),

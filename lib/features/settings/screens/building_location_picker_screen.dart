@@ -62,7 +62,7 @@ class _BuildingLocationPickerScreenState
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         if (showError) {
-          _showSnack('Hay bat dich vu vi tri tren thiet bi.');
+          _showSnack('Hãy bật dịch vụ vị trí trên thiết bị.');
         }
         return;
       }
@@ -76,7 +76,7 @@ class _BuildingLocationPickerScreenState
           permission == LocationPermission.deniedForever;
       if (denied) {
         if (showError) {
-          _showSnack('Ban chua cap quyen vi tri cho ung dung.');
+          _showSnack('Ban chưa cấp quyền vị trí cho ung dùng.');
         }
         if (mounted) {
           setState(() => _hasLocationPermission = false);
@@ -112,7 +112,7 @@ class _BuildingLocationPickerScreenState
       );
     } catch (_) {
       if (showError) {
-        _showSnack('Khong lay duoc vi tri hien tai.');
+        _showSnack('Không lấy được vị trí hiện tại.');
       }
     } finally {
       if (mounted) {
@@ -155,14 +155,14 @@ class _BuildingLocationPickerScreenState
     final marker = Marker(
       markerId: const MarkerId('building_location'),
       position: _selectedPosition,
-      infoWindow: const InfoWindow(title: 'Vi tri toa nha'),
+      infoWindow: const InfoWindow(title: 'Vị trí tòa nhà'),
     );
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Chon vi tri toa nha'),
+        title: const Text('Chọn vị trí tòa nhà'),
         actions: [
-          TextButton(onPressed: _saveSelection, child: const Text('Luu')),
+          TextButton(onPressed: _saveSelection, child: const Text('Lưu')),
         ],
       ),
       body: Column(
@@ -172,7 +172,7 @@ class _BuildingLocationPickerScreenState
             child: TextField(
               controller: _addressController,
               decoration: const InputDecoration(
-                labelText: 'Dia chi toa nha',
+                labelText: 'Địa chỉ tòa nhà',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.home_outlined),
               ),
@@ -217,7 +217,7 @@ class _BuildingLocationPickerScreenState
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'Da chon: ${_selectedPosition.latitude.toStringAsFixed(6)}, ${_selectedPosition.longitude.toStringAsFixed(6)}',
+                    'Đã chọn: ${_selectedPosition.latitude.toStringAsFixed(6)}, ${_selectedPosition.longitude.toStringAsFixed(6)}',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
@@ -225,7 +225,7 @@ class _BuildingLocationPickerScreenState
                   const SizedBox(height: 6),
                   Text(
                     _formattedAddress.trim().isEmpty
-                        ? 'Cham vao ban do de dat dung vi tri toa nha.'
+                        ? 'Chạm vào bản đồ để đặt đúng vị trí tòa nhà.'
                         : _formattedAddress,
                     style: const TextStyle(color: Colors.black54),
                   ),
@@ -238,13 +238,13 @@ class _BuildingLocationPickerScreenState
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.my_location_outlined),
-                    label: const Text('Lay vi tri hien tai'),
+                    label: const Text('Lấy vị trí hiện tại'),
                   ),
                   const SizedBox(height: 12),
                   FilledButton.icon(
                     onPressed: _saveSelection,
                     icon: const Icon(Icons.check),
-                    label: const Text('Dung vi tri nay'),
+                    label: const Text('Dùng vị trí này'),
                   ),
                 ],
               ),
